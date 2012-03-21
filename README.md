@@ -46,6 +46,21 @@ Nothing to do : sandboxnico has same versions as syslog_double
 
 It will upload the cookbooks (to ensure they meet the one on the branch you're working on) and will set the version to the required number.
 
+Git repository path
+===================
+
+If your cookbook_path is not the root of your git directory then the grit gem will produce an error. This can be circumvented by adding the following directive in your knife.rb :
+
+git_cookbook_path 'the/path'
+
+example :
+<pre>
+cookbook_path            '/home/nico/sysadmin/chef/cookbooks'
+git_cookbook_path        '/home/nico/sysadmin/chef/'
+</pre>
+
+As we version more than the cookbooks in the repo.
+
 License
 =======
 3 clauses BSD
