@@ -9,9 +9,18 @@ end
 module Fotolia
   class Align < Chef::Knife
 
-    banner "knife align [BRANCH] [ENVIRONMENT]"
+    banner "knife align BRANCH ENVIRONMENT [--debug]"
+
+    option :debug,
+      :short => '-d',
+      :long  => '--debug',
+      :description => "turn debug on",
+      :default => false
 
     deps do
+      require 'chef/data_bag'
+      require 'chef/data_bag_item'
+      require 'chef/json_compat'
       require 'chef/knife/search'
       require 'chef/environment'
       require 'chef/cookbook/metadata'
@@ -19,8 +28,13 @@ module Fotolia
     end
 
     def run
+      align_cookbooks()
+      align_databags()
+    end
+
+    def align_cookbooks
       if name_args.count < 2 then
-        ui.error "Usage : knife align [BRANCH] [ENVIRONMENT]"
+        ui.error "Usage : knife align BRANCH ENVIRONMENT [--debug]"
         exit 1
       end
 
@@ -143,6 +157,102 @@ module Fotolia
 
       return cbs
     end
+
+    def align_databags
+      if Chef::Config::git_cookbook_path then
+        path = Chef::Config::git_cookbook_path
+      else
+        path = Chef::Config::cookbook_path
+      end
+
+      to_update = Hash.new
+
+      # walk data bags json files
+      dtbg_dir = Dir.open(path + "/data_bags")
+      local_dtbgs = dtbg_dir.entries
+      # dropping dots
+      local_dtbgs.delete("..")
+      local_dtbgs.delete(".")
+
+      local_dtbgs.each do |ld|
+        dtbg_items = Dir.open(path + "data_bags/" + ld).entries
+        dtbg_items.delete("..")
+        dtbg_items.delete(".")
+        dtbg_items.each do |item|
+          item_name = item.gsub(".json","")
+          # do we have the same
+          begin
+            remote_item = Chef::DataBagItem.load(ld, item_name).raw_data
+            # found ? load local item
+            item_path = path + "data_bags/" + ld + "/" + item
+            fp = open(item_path,"r")
+            local_item = JSON::load(fp)
+            if local_item != remote_item then
+              puts "#{item} data is different between local repository & server"
+              if config[:debug] == true then
+                puts "local : #{local_item.keys.count} key(s)"
+                puts "remote : #{remote_item.keys.count} key(s)"
+              end
+              # save to the list
+              unless to_update.has_key?(ld)
+                to_update[ld]=Array.new
+              end
+              to_update[ld].push(item_path)
+            end
+          rescue Net::HTTPServerException => e
+            # not found on the server, warn user
+            if e.data.code == "404" then
+              if config[:debug] == true then
+                puts "--- WARNING : item #{item_name} was not found in databag #{ld} on server"
+              end
+              unless to_update.has_key?(ld)
+                to_update[ld]=Array.new
+              end
+              to_update[ld].push(item_path)
+            end
+
+          end
+        end
+      end
+     
+      if to_update.empty? == false then
+        puts "About to push the following files to the server :"
+        to_update.each_pair do |dtbg, files|
+          files.each do |f|
+            puts " * #{f} to databag #{dtbg}"
+          end
+        end
+        puts "Upload ? Y/N"
+        answer="N"
+        answer = STDIN.getc
+        answer = answer.chr
+        if answer != "Y" then
+          puts "Aborting"
+        else
+          to_update.each_pair do |dtbg,files|
+            files.each do |f|
+              upload_databag(f,dtbg)
+            end
+          end
+        end
+      else
+        puts "No differences in databags found"
+      end
+    end
+
+    # no need for the databag item name as it is the ID key
+    def upload_databag(filepath, databag_name)
+      dbag = Chef::DataBagItem.new
+      dbag.data_bag(databag_name)
+      fp = open(filepath,"r")
+      dbag.raw_data = JSON::load(fp)
+      dbag.save
+      if config[:debug] == true then
+        puts "uploaded #{filepath} to #{databag_name}/#{dbag.id}"
+      end
+    end
+
+
 
   end
 end
