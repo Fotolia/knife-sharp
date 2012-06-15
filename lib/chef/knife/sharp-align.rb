@@ -6,16 +6,18 @@ rescue
   exit 1
 end
 
-module Fotolia
-  class Align < Chef::Knife
+module KnifeSharp
+  class SharpAlign < Chef::Knife
 
-    banner "knife align BRANCH ENVIRONMENT [--debug]"
+    banner "knife sharp align BRANCH ENVIRONMENT [--debug]"
 
     option :debug,
       :short => '-d',
       :long  => '--debug',
       :description => "turn debug on",
       :default => false
+
+    @@cfg_files = [ "/etc/sharp-config.yml", "~/.chef/sharp-config.yml" ]
 
     deps do
       require 'chef/data_bag'
@@ -28,9 +30,28 @@ module Fotolia
     end
 
     def run
+      load_config()
       align_cookbooks()
       align_databags()
     end
+
+    def load_config
+      loaded = false
+      @@cfg_files.each do |cfg_file|
+        begin
+          @@cfg=YAML::load_file(File.expand_path(cfg_file))
+          loaded = true
+        rescue Exception => e
+          puts "Error on loading config : #{e.inspect}" if config[:debug]
+        end
+      end
+      unless loaded == true
+        ui.error "config could not be loaded ! Tried the following files : #{@@cfg_files.join(", ")}"
+        exit 1
+      end
+      puts @@cfg.inspect if config[:debug]
+    end
+
 
     def align_cookbooks
       if name_args.count < 2 then
@@ -41,10 +62,10 @@ module Fotolia
       branch = name_args.first
       environment = name_args[1]
 
-      if Chef::Config::git_cookbook_path then
-        path = Chef::Config::git_cookbook_path
+      if @@cfg["global"]["git_cookbook_path"] then
+        path = @@cfg["global"]["git_cookbook_path"]
       else
-        path = Chef::Config::cookbook_path
+        path = Chef::Config::cookbook_path.first
       end
 
       current_branch = Grit::Repo.new(path).head.name
@@ -102,6 +123,7 @@ module Fotolia
               exit -1
             else
               puts "Successfull upload for #{cb}"
+              log_action("uploaded cookbook #{cb} version #{version}")
             end
           end
 
@@ -113,6 +135,7 @@ module Fotolia
           tmpf = File.open(tmp.path,'w')
           bumps.each_pair do |cb,version|
               env.cookbook_versions[cb]=version
+              log_action("bumped cookbook #{cb} to #{version} for environment #{environment}")
           end
           tmpf.write(env.to_json)
           tmpf.close
@@ -249,10 +272,26 @@ module Fotolia
       dbag.save
       if config[:debug] == true then
         puts "uploaded #{filepath} to #{databag_name}/#{dbag.id}"
+        log_action("uploaded #{filepath} to #{databag_name}/#{dbag.id}")
       end
     end
 
+    def log_action(message)
+      unless @@cfg["logging"]["enabled"] == true
+        return
+      end
+      
+      begin
+        require "logger"
+        log_file = File.expand_path(@@cfg["logging"]["destination"])
+        log = Logger.new(log_file)
+        log.info(message)
+        log.close
 
+      rescue Exception => e
+        ui.error "Oops ! #{e.inspect} ! message to log was #{message}"
+      end
+    end
 
   end
 end

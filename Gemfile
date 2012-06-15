@@ -1,0 +1,4 @@
+ource :rubygems
+source "http://rubygems.org"
+gem "chef"
+gem "grit"
