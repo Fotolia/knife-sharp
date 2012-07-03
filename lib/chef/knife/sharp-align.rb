@@ -17,8 +17,6 @@ module KnifeSharp
       :description => "turn debug on",
       :default => false
 
-    @@cfg_files = [ "/etc/sharp-config.yml", "~/.chef/sharp-config.yml" ]
-
     deps do
       require 'chef/data_bag'
       require 'chef/data_bag_item'
@@ -29,11 +27,7 @@ module KnifeSharp
       require 'chef/knife/core/object_loader'
     end
 
-    def run
-      load_config()
-      align_cookbooks()
-      align_databags()
-    end
+    @@cfg_files = [ "/etc/sharp-config.yml", "~/.chef/sharp-config.yml" ]
 
     def load_config
       loaded = false
@@ -52,6 +46,11 @@ module KnifeSharp
       puts @@cfg.inspect if config[:debug]
     end
 
+    def run
+      load_config()
+      align_cookbooks()
+      align_databags()
+    end
 
     def align_cookbooks
       if name_args.count < 2 then
