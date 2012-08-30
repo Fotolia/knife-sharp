@@ -197,7 +197,7 @@ module KnifeSharp
       local_dtbgs.delete(".")
 
       local_dtbgs.each do |ld|
-        dtbg_items = Dir.open(path + "data_bags/" + ld).entries
+        dtbg_items = Dir.open(path + "/data_bags/" + ld).entries
         dtbg_items.delete("..")
         dtbg_items.delete(".")
         dtbg_items.each do |item|
@@ -206,7 +206,7 @@ module KnifeSharp
           begin
             remote_item = Chef::DataBagItem.load(ld, item_name).raw_data
             # found ? load local item
-            item_path = path + "data_bags/" + ld + "/" + item
+            item_path = path + "/data_bags/" + ld + "/" + item
             fp = open(item_path,"r")
             local_item = JSON::load(fp)
             if local_item != remote_item then
