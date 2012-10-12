@@ -3,3 +3,9 @@ logging:
   destination: "~/.chef/sharp.log"
 global:
   git_cookbook_path: "/home/nico/sysadmin/chef/"
+notification:
+  hubot:
+    enabled: true
+    url: "http://your.hubot.lan:18080/hubot/chef/bump/"
+    channel: "foo"
+    username: "Nicolas"

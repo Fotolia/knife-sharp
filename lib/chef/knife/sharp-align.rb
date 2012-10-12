@@ -9,12 +9,18 @@ end
 module KnifeSharp
   class SharpAlign < Chef::Knife
 
-    banner "knife sharp align BRANCH ENVIRONMENT [--debug]"
+    banner "knife sharp align BRANCH ENVIRONMENT [--debug] [--quiet]"
 
     option :debug,
       :short => '-d',
       :long  => '--debug',
       :description => "turn debug on",
+      :default => false
+
+    option :quiet,
+      :short => '-q',
+      :long => '--quiet',
+      :description => 'does not notifies',
       :default => false
 
     deps do
@@ -70,7 +76,7 @@ module KnifeSharp
       current_branch = Grit::Repo.new(path).head.name
       if branch != current_branch then
         puts "Git repo is actually on branch #{current_branch} but you want to align using #{branch}. Checkout to the desired one."
-        exit -1
+        exit 1
       end
 
       target_versions = get_versions_from_env(environment)
@@ -91,7 +97,7 @@ module KnifeSharp
         local_versions.each_pair do |l_cb,l_version|
           if l_cb == t_cb then
             if t_version != l_version then
-#              puts "#{t_cb} : local is #{l_version} => #{t_version} (remote)"
+              puts "#{t_cb} : local is #{l_version} => #{t_version} (remote)" if config[:debug]
               bumps[t_cb] = l_version
             end
           end
@@ -119,7 +125,7 @@ module KnifeSharp
             result=%x[knife cookbook upload #{cb}]
             if $? != 0 then
               puts "Uploading #{cb} failed. stopping"
-              exit -1
+              exit 1
             else
               puts "Successfull upload for #{cb}"
               log_action("uploaded cookbook #{cb} version #{version}")
@@ -135,6 +141,7 @@ module KnifeSharp
           bumps.each_pair do |cb,version|
               env.cookbook_versions[cb]=version
               log_action("bumped cookbook #{cb} to #{version} for environment #{environment}")
+              hubot_notify(cb, version, environment)
           end
           tmpf.write(env.to_json)
           tmpf.close
@@ -236,7 +243,7 @@ module KnifeSharp
           end
         end
       end
-     
+
       if to_update.empty? == false then
         puts "About to push the following files to the server :"
         to_update.each_pair do |dtbg, files|
@@ -279,7 +286,7 @@ module KnifeSharp
       unless @@cfg["logging"]["enabled"] == true
         return
       end
-      
+
       begin
         require "logger"
         log_file = File.expand_path(@@cfg["logging"]["destination"])
@@ -289,6 +296,27 @@ module KnifeSharp
 
       rescue Exception => e
         ui.error "Oops ! #{e.inspect} ! message to log was #{message}"
+      end
+    end
+
+    def hubot_notify(cookbook, to_version, environment)
+      unless @@cfg["notification"]["hubot"]["enabled"] == true and config[:quiet] == false
+        puts "Aborting due to quiet or config disabled" if config[:debug]
+        return
+      end
+
+      begin
+        require "net/http"
+        require "uri"
+        uri = URI.parse(@@cfg["notification"]["hubot"]["url"] + @@cfg["notification"]["hubot"]["channel"])
+        user = @@cfg["notification"]["hubot"]["username"]
+
+        Net::HTTP.post_form(uri, { "cookbook" => cookbook,
+                                   "user" => user,
+                                   "to_version" => to_version,
+                                   "environment" => environment })
+      rescue
+        ui.error "Oops ! could not notify hubot !"
       end
     end
 

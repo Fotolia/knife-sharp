@@ -1,12 +1,12 @@
 Gem::Specification.new do |s|
   s.name        = 'knife-sharp'
-  s.version     = '0.0.2'
-  s.date        = '2012-06-15'
+  s.version     = '0.0.3'
+  s.date        = '2012-10-12'
   s.summary     = "Knife sharp plugin"
   s.description = "Sharpen your knife"
   s.authors     = ["Nicolas Szalay"]
   s.email       = 'nico@rottenbytes.info'
-  s.files       = %w[ 
+  s.files       = %w[
                     README.md
                     ext/sharp-config.yml
                     lib/knife-sharp.rb
