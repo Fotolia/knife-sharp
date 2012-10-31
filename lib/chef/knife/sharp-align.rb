@@ -82,7 +82,7 @@ module KnifeSharp
       target_versions = get_versions_from_env(environment)
       local_versions = get_local_versions()
 
-      only_local = target_versions.keys - local_versions.keys
+      only_local = local_versions.keys - target_versions.keys
 
       unless only_local.empty?
         puts "Cookbooks only available on local repo (not on server) :"
@@ -175,7 +175,7 @@ module KnifeSharp
         Chef::Config.from_file(File.join(ENV['HOME'], '.chef', 'knife.rb'))
       end
 
-      Dir.glob("#{Chef::Config.cookbook_path}/*").each do |cookbook|
+      Dir.glob("#{Chef::Config.cookbook_path.first}/*").each do |cookbook|
         md = Chef::Cookbook::Metadata.new
 
         cb_name = File.basename(cookbook)
