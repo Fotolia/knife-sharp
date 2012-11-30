@@ -14,4 +14,5 @@ Gem::Specification.new do |s|
                     lib/chef/knife/sharp-history.rb
                   ]
   s.homepage    = 'http://www.rottenbytes.info'
+  s.add_dependency "grit", "~> 2.5.0"
 end
