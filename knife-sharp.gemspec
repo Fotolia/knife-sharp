@@ -1,6 +1,8 @@
+require File.join(File.dirname(__FILE__), "lib", "knife-sharp.rb")
+
 Gem::Specification.new do |s|
   s.name        = 'knife-sharp'
-  s.version     = '0.0.3'
+  s.version     = KnifeSharp::VERSION
   s.date        = '2012-10-12'
   s.summary     = "Knife sharp plugin"
   s.description = "Sharpen your knife"
