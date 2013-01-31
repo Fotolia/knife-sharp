@@ -26,8 +26,12 @@ module KnifeSharp
 
     def run
       setup()
+      ui.msg "Aligning cookbooks"
       align_cookbooks()
+      ui.msg "Aligning data bags"
       align_databags()
+      ui.msg "Aligning roles"
+      align_roles()
     end
 
     def setup
@@ -68,6 +72,7 @@ module KnifeSharp
       chefcfg = Chef::Config
       @cb_path = chefcfg.cookbook_path.is_a?(Array) ? chefcfg.cookbook_path.first : chefcfg.cookbook_path
       @db_path = chefcfg.data_bag_path.is_a?(Array) ? chefcfg.data_bag_path.first : chefcfg.data_bag_path
+      @role_path = chefcfg.role_path.is_a?(Array) ? chefcfg.role_path.first : chefcfg.role_path
 
       # Checking current branch
       current_branch = Grit::Repo.new(@chef_path).head.name
@@ -230,6 +235,90 @@ module KnifeSharp
       dbag.data_bag(databag_name)
       dbag.raw_data = JSON::load(File.read(filepath))
       dbag.save
+    end
+
+    ### Role methods ###
+
+    def align_roles
+      # role sections to compare (methods)
+      to_check = {
+        "env_run_lists" => "run list",
+        "default_attributes" => "default attributes",
+        "override_attributes" => "override attributes"
+      }
+
+      unless File.exists?(@role_path)
+        ui.warn "Bad role path, skipping role sync."
+        return
+      end
+
+      updated_roles = Hash.new
+      local_roles = Dir.glob(File.join(@role_path, "*.json")).map {|file| File.basename(file, ".json")}
+      remote_roles = Chef::Role.list.keys
+
+      ui.warn "No local roles found, is the role path correct ? (#{@role_path})" if local_roles.empty?
+
+      # Create new roles on server
+      (local_roles - remote_roles).each do |role|
+        ui.msg "+ #{role} role is local only. Creating"
+        begin
+          local_role = Chef::Role.from_disk(role)
+          local_role.save
+        rescue Exception => e
+          ui.error "Unable to create #{role} role (#{e.message})"
+        end
+      end
+
+      # Dump missing roles locally
+      (remote_roles - local_roles).each do |role|
+        ui.msg "- #{role} role is remote only. Dumping to #{File.join(@role_path, "#{role}.json")}"
+        begin
+          remote_role = Chef::Role.load(role)
+          File.open(File.join(@role_path, "#{role}.json"), "w") do |file|
+            file.puts JSON.pretty_generate(remote_role)
+          end
+        rescue Exception => e
+          ui.error "Unable to dump #{role} role (#{e.message})"
+        end
+      end
+
+      # Compare roles common to local and remote
+      (remote_roles & local_roles).each do |role|
+        remote_role = Chef::Role.load(role)
+        local_role = Chef::Role.from_disk(role)
+
+        diffs = Array.new
+        to_check.each do |method, display|
+          if remote_role.send(method) != local_role.send(method)
+            updated_roles[role] = local_role
+            diffs << display
+          end
+        end
+        ui.msg("* #{role} role is not up-to-date (#{diffs.join(",")})") unless diffs.empty?
+      end
+
+      if !updated_roles.empty?
+        all = false
+        updated_roles.each do |name, obj|
+          answer = ui.ask_question("Update #{name} role on server ? Y/N/(A)ll/(Q)uit ", :default => "N").upcase unless all
+
+          if answer == "A"
+            all = true
+          elsif answer == "Q"
+            ui.msg "> Aborting role alignment."
+            break
+          end
+
+          if all or answer == "Y"
+            ui.msg "* Updating #{name} role"
+            obj.save
+          else
+            ui.msg "* Skipping #{name} role"
+          end
+        end
+      else
+        ui.msg "> Roles are up-to-date."
+      end
     end
 
     ### Utility methods ###
