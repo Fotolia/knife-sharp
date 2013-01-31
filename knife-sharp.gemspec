@@ -6,7 +6,7 @@ Gem::Specification.new do |s|
   s.date        = '2012-10-12'
   s.summary     = "Knife sharp plugin"
   s.description = "Sharpen your knife"
-  s.authors     = ["Nicolas Szalay"]
+  s.authors     = [ "Nicolas Szalay", "Jonathan Amiez" ]
   s.email       = 'nico@rottenbytes.info'
   s.files       = %w[
                     README.md
