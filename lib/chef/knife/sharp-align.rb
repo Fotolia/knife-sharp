@@ -26,8 +26,11 @@ module KnifeSharp
 
     def run
       setup()
+      ui.msg "Aligning cookbooks"
       align_cookbooks()
+      ui.msg "Aligning data bags"
       align_databags()
+      ui.msg "Aligning roles"
       align_roles()
     end
 
@@ -268,7 +271,7 @@ module KnifeSharp
 
       # Dump missing roles locally
       (remote_roles - local_roles).each do |role|
-        ui.msg "- #{role} role is remote only. Dumping"
+        ui.msg "- #{role} role is remote only. Dumping to #{File.join(@role_path, "#{role}.json")}"
         begin
           remote_role = Chef::Role.load(role)
           File.open(File.join(@role_path, "#{role}.json"), "w") do |file|
@@ -298,17 +301,23 @@ module KnifeSharp
         all = false
         updated_roles.each do |name, obj|
           answer = ui.ask_question("Update #{name} role on server ? Y/N/(A)ll/(Q)uit ", :default => "N").upcase unless all
-          all = true if answer == "A"
-          break if answer == "Q"
+
+          if answer == "A"
+            all = true
+          elsif answer == "Q"
+            ui.msg "> Aborting role alignment."
+            break
+          end
+
           if all or answer == "Y"
-            ui.msg "Updating #{name} role"
+            ui.msg "* Updating #{name} role"
             obj.save
           else
-            ui.msg "Skipping #{name} role"
+            ui.msg "* Skipping #{name} role"
           end
         end
       else
-        ui.msg "Roles are up-to-date."
+        ui.msg "> Roles are up-to-date."
       end
     end
 
