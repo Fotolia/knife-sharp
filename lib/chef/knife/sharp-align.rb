@@ -64,8 +64,10 @@ module KnifeSharp
       # Env setup
       @branch, @environment = name_args
       @chef_path = @cfg["global"]["git_cookbook_path"]
-      @cb_path = Chef::Config.cookbook_path.first
-      @db_path = File.join(@chef_path, "data_bags")
+
+      chefcfg = Chef::Config
+      @cb_path = chefcfg.cookbook_path.is_a?(Array) ? chefcfg.cookbook_path.first : chefcfg.cookbook_path
+      @db_path = chefcfg.data_bag_path.is_a?(Array) ? chefcfg.data_bag_path.first : chefcfg.data_bag_path
 
       # Checking current branch
       current_branch = Grit::Repo.new(@chef_path).head.name
