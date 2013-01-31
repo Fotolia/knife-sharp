@@ -171,70 +171,80 @@ module KnifeSharp
     ### Databag methods ###
 
     def align_databags
-      to_update = Hash.new
+      unless File.exists?(@db_path)
+        ui.warn "Bad data bag path, skipping data bag sync."
+        return
+      end
 
-      # walk data bags json files
-      Dir.glob(File.join(@db_path,"*")).each do |ld|
-        dtbg_name = File.basename(ld)
-        Dir.glob(File.join(ld, "*.json")).each do |item|
-          item_name = File.basename(item, ".json")
-          # do we have the same
-          begin
-            remote_item = Chef::DataBagItem.load(dtbg_name, item_name).raw_data
-            # found ? load local item
-            local_item = JSON::load(File.read(item))
-            if local_item != remote_item
-              ui.msg "#{item} data is different between local repository & server"
-              if config[:debug] == true then
-                ui.msg "local : #{local_item.keys.count} key(s)"
-                ui.msg "remote : #{remote_item.keys.count} key(s)"
-              end
-              # save to the list
-              to_update[dtbg_name] ||= Array.new
-              to_update[dtbg_name].push(item)
-            end
-          rescue Net::HTTPServerException => e
-            # not found on the server, warn user
-            if e.data.code == "404" then
-              ui.msg "item #{item_name} was not found in databag #{dtbg_name} on server"
-              to_update[dtbg_name] ||= Array.new
-              to_update[dtbg_name].push(item)
-            end
-          end
+      updated_dbs = Hash.new
+      local_dbs = Dir.glob(File.join(@db_path, "**/*.json")).map {|f| [File.dirname(f).split("/").last, File.basename(f, ".json")]}
+      remote_dbs = Chef::DataBag.list.keys.map {|db| Chef::DataBag.load(db).keys.map{|dbi| [db, dbi]}}.flatten(1)
+
+      ui.warn "No local data bags found, is the role path correct ? (#{@role_path})" if local_dbs.empty?
+
+      # Create new data bags on server
+      (local_dbs - remote_dbs).each do |db|
+        ui.msg "+ #{db.join("/")} data bag item is local only. Creating"
+        begin
+          local_db = Chef::DataBagItem.new
+          local_db.data_bag(db.first)
+          local_db.raw_data = JSON::load(File.read(File.join(@db_path, "#{db.join("/")}.json")))
+          local_db.save
+        rescue Exception => e
+          ui.error "Unable to create #{db.join("/")} data bag item (#{e.message})"
         end
       end
 
-      if !to_update.empty?
-        ui.msg "About to push the following files to the server :"
-        to_update.each_pair do |dtbg, files|
-          files.each do |f|
-            ui.msg " * #{f} to databag #{dtbg}"
+      # Dump missing data bags locally
+      (remote_dbs - local_dbs).each do |db|
+        ui.msg "- #{db.join("/")} data bag item is remote only. Dumping to #{File.join(@db_path, "#{db.join("/")}.json")}"
+        begin
+          remote_db = Chef::DataBagItem.load(db.first, db.last).raw_data
+          Dir.mkdir(File.join(@db_path, db.first)) unless Dir.exists?(File.join(@db_path, db.first))
+          File.open(File.join(@db_path, "#{db.join("/")}.json"), "w") do |file|
+            file.puts JSON.pretty_generate(remote_db)
           end
+        rescue Exception => e
+          ui.error "Unable to dump #{db.join("/")} data bag item (#{e.message})"
         end
-        answer = ui.ask_question("Upload ? Y/N ", :default => "N")
-        if answer == "Y" then
-          to_update.each_pair do |dtbg,files|
-            files.each do |f|
-              upload_databag(f,dtbg)
-              log_action("Uploaded #{f} to #{dtbg}")
-            end
+      end
+
+      # Compare roles common to local and remote
+      (remote_dbs & local_dbs).each do |db|
+        remote_db = Chef::DataBagItem.load(db.first, db.last).raw_data
+        local_db = JSON::load(File.read(File.join(@db_path, "#{db.join("/")}.json")))
+
+        if remote_db != local_db
+          updated_dbs[db] = local_db
+          ui.msg("* #{db.join("/")} data bag item is not up-to-date")
+        end
+      end
+
+      if !updated_dbs.empty?
+        all = false
+        updated_dbs.each do |name, obj|
+          answer = ui.ask_question("Update #{name.join("/")} data bag item on server ? Y/N/(A)ll/(Q)uit ", :default => "N").upcase unless all
+
+          if answer == "A"
+            all = true
+          elsif answer == "Q"
+            ui.msg "> Aborting data bag alignment."
+            break
           end
 
-          ui.msg "Done."
-        else
-          ui.msg "Aborting."
+          if all or answer == "Y"
+            ui.msg "* Updating #{name.join("/")} data bag item"
+            db = Chef::DataBagItem.new
+            db.data_bag(name.first)
+            db.raw_data = obj
+            db.save
+          else
+            ui.msg "* Skipping #{name.join("/")} data bag item"
+          end
         end
       else
-        ui.msg "No differences in databags found."
+        ui.msg "> Data bags are up-to-date."
       end
-    end
-
-    # no need for the databag item name as it is the ID key
-    def upload_databag(filepath, databag_name)
-      dbag = Chef::DataBagItem.new
-      dbag.data_bag(databag_name)
-      dbag.raw_data = JSON::load(File.read(filepath))
-      dbag.save
     end
 
     ### Role methods ###
