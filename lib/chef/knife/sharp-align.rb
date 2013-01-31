@@ -244,9 +244,16 @@ module KnifeSharp
         "override_attributes" => "override attributes"
       }
 
+      unless File.exists?(@role_path)
+        ui.warn "Bad role path, skipping role sync."
+        return
+      end
+
       updated_roles = Hash.new
       local_roles = Dir.glob(File.join(@role_path, "*.json")).map {|file| File.basename(file, ".json")}
       remote_roles = Chef::Role.list.keys
+
+      ui.warn "No local roles found, is the role path correct ? (#{@role_path})" if local_roles.empty?
 
       # Create new roles on server
       (local_roles - remote_roles).each do |role|

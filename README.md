@@ -1,15 +1,25 @@
 # Knife sharp plugin
 
-This plugin is used to align an environment cookbooks on a given git branch. You will need the grit gem to use it too.
-
+This plugin is used to align an environment cookbooks on a given git branch.
+It can be used to synchronize data bags and roles from local JSON copy to Chef server.
 
 # Tell me more
 
 When you want an environment to reflect a given branch you have to check by hand (or using our consistency plugin), and some mistakes can be made. This plugin aims to help to push the right version into an environment.
 
+It also allows to adopt a review workflow for main chef components :
+* Track data bags, roles (as JSON files) and cookbooks in your Chef git repository
+* Push each modification of any to peer-review
+* Once merged, upload every change with knife sharp align
+
 # Show me !
 
 <pre>
+[mordor:~] git branch
+...
+master
+* syslog_double
+...
 [mordor:~] knife environment show sandboxnico
 chef_type:            environment
 cookbook_versions:
@@ -30,7 +40,7 @@ Done.
 Then we can check environment :
 
 <pre>
-[mordor:~] knife environment show sandboxnico 
+[mordor:~] knife environment show sandboxnico
 chef_type:            environment
 cookbook_versions:
 ...
@@ -44,9 +54,16 @@ It will upload the cookbooks (to ensure they meet the one on the branch you're w
 
 # Configuration
 
+Dependencies :
+* grit
+
 The plugin will search in 2 places for its config file :
 * "/etc/sharp-config.yml"
 * "~/.chef/sharp-config.yml"
+
+An example config file is provided in ext/.
+
+A working knife setup is also required (cookbook/role/data bag paths depending on the desired features)
 
 ## Cookbooks path & git
 If your cookbook_path is not the root of your git directory then the grit gem will produce an error. This can be circumvented by adding the following directive in your config file :
