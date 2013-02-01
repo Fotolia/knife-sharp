@@ -1,7 +1,10 @@
 # Knife sharp plugin
 
-This plugin is used to align an environment cookbooks on a given git branch.
-It can be used to synchronize data bags and roles from local JSON copy to Chef server.
+knife-sharp adds several handy features to knife, adapted to our workflow @ Fotolia.
+Features:
+* align : sync data bags, roles and cookbook versions between a local git branches and a chef server
+* backup : dump environments, roles and data bags to local json files
+* server : switch between chef servers using multiple knife.rb config files
 
 # Tell me more
 
@@ -14,19 +17,21 @@ It also allows to adopt a review workflow for main chef components :
 
 # Show me !
 
+## Align
+
 <pre>
-[mordor:~] git branch
+$ git branch
 ...
 master
 * syslog_double
 ...
-[mordor:~] knife environment show sandboxnico
+$ knife environment show sandboxnico
 chef_type:            environment
 cookbook_versions:
 ...
   syslog:  0.0.16
 ...
-[mordor:~] knife sharp align syslog_double sandboxnico
+$ knife sharp align syslog_double sandboxnico
 
 Will change in environment sandboxnico :
 * syslog gets version 0.0.17
@@ -34,23 +39,60 @@ Upload and set version into environment sandboxnico ? Y/N
 Y
 Successfull upload for syslog
 Aligning 1 cookbooks
-Done.
+Aligning data bags
+* infrastructure/mail data bag item is not up-to-date
+Update infrastructure/mail data bag item on server ? Y/N/(A)ll/(Q)uit [N] n
+* Skipping infrastructure/mail data bag item
+Aligning roles
+* Dev_Server role is not up-to-date (run list)
+Update Dev_Server role on server ? Y/N/(A)ll/(Q)uit [N] n
+* Skipping Dev_Server role
 </pre>
 
 Then we can check environment :
 
 <pre>
-[mordor:~] knife environment show sandboxnico
+$ knife environment show sandboxnico
 chef_type:            environment
 cookbook_versions:
 ...
   syslog:  0.0.17
 ...
-[mordor:~] knife sharp align syslog_double sandboxnico
+$ knife sharp align syslog_double sandboxnico
 Nothing to do : sandboxnico has same versions as syslog_double
 </pre>
 
 It will upload the cookbooks (to ensure they meet the one on the branch you're working on) and will set the version to the required number.
+
+## Backup
+
+Making a backup before a large change can be a lifesaver. Knife sharp can do it for you, easily
+<pre>
+$ knife sharp backup
+Backing up roles
+Backing up environments
+Backing up databags
+$
+</pre>
+
+All these items get stored in the place defined in your config file.
+
+## Server
+
+<pre>
+$ knife sharp server
+Available servers:
+   prod (/home/jamiez/.chef/knife-prod.rb)
+>> dev (/home/jamiez/.chef/knife-dev.rb)
+
+$ knife sharp server prod
+The knife configuration has been updated to use prod.
+
+$ knife sharp server
+Available servers:
+>> prod (/home/jamiez/.chef/knife-prod.rb)
+   dev (/home/jamiez/.chef/knife-dev.rb)
+</pre>
 
 # Configuration
 
@@ -85,20 +127,11 @@ logging:
 
 It will log uploads, bumps and databags to the standard logger format.
 
-## Backups
-Making a backup before a large change can be a lifesaver. Knife sharp can do it for you, easily
-<pre>
-$ knife sharp backup
-Backing up roles
-Backing up environments
-Backing up databags
-$
-</pre>
+# Credits
 
-All these items get stored in the place defined in your config file.
-
-# See also
 The damn good knife spork plugin from the etsy folks : https://github.com/jonlives/knife-spork
+
+Idea for knife sharp server comes from https://github.com/greenandsecure/knife-block
 
 License
 =======
