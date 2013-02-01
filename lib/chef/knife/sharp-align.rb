@@ -58,8 +58,8 @@ module KnifeSharp
       end
 
       # Knife config
-      if (ENV['HOME'] && File.exist?(File.join(ENV['HOME'], '.chef', 'knife.rb')))
-        Chef::Config.from_file(File.join(ENV['HOME'], '.chef', 'knife.rb'))
+      if Chef::Knife.chef_config_dir && File.exists?(File.join(Chef::Knife.chef_config_dir, "knife.rb"))
+        Chef::Config.from_file(File.join(Chef::Knife.chef_config_dir, "knife.rb"))
       else
         ui.error "Cannot find knife.rb config file"
         exit 1
@@ -85,68 +85,57 @@ module KnifeSharp
     ### Cookbook methods ###
 
     def align_cookbooks
-      target_versions = get_cookbook_versions_from_env(@environment)
-      cb_list = target_versions.keys
+      updated_versions = Hash.new()
       local_versions = get_cookbook_local_versions()
-      cb_list += local_versions.keys
+      remote_versions = get_cookbook_versions_from_env(@environment)
 
-      only_local = local_versions.keys - target_versions.keys
+      (local_versions.keys - remote_versions.keys).each do |cb|
+        updated_versions[cb] = local_versions[cb]
+        ui.msg "* #{cb} is local only (version #{local_versions[cb]})"
+      end
 
-      bumps = Hash.new()
-
-      (cb_list - only_local).each do |cb|
-        if target_versions[cb] != local_versions[cb]
-          bumps[cb] = local_versions[cb]
+      (remote_versions.keys & local_versions.keys).each do |cb|
+        if remote_versions[cb] != local_versions[cb]
+          updated_versions[cb] = local_versions[cb]
+          ui.msg "* #{cb} is not up-to-date (local: #{local_versions[cb]}/remote: #{remote_versions[cb]})"
         end
       end
 
-      unless bumps.empty?
-        ui.msg "Cookbooks not up to date on server :"
-        bumps.each do |cb,version|
-          ui.msg "* #{cb} gets version #{version} (currently #{target_versions[cb]})"
-        end
-      end
+      bumped = Hash.new
+      if !updated_versions.empty?
+        all = false
+        env = Chef::Environment.load(@environment)
+        loader = Chef::CookbookLoader.new(@cb_path)
+        updated_versions.each_pair do |cb,version|
+          answer = ui.ask_question("Update #{cb} cookbook item on server ? Y/N/(A)ll/(Q)uit ", :default => "N").upcase unless all
 
-      unless only_local.empty?
-        ui.msg "Cookbooks only available on local repo (not on server) :"
-        only_local.each do |cb|
-          ui.msg "* #{cb} (#{local_versions[cb]})"
-        end
-      end
-
-      if !bumps.empty?
-        answer = ui.ask_question("Upload and set version into environment #{@environment} ? Y/N ", :default => "N")
-        if answer == "Y"
-          bumps.each_pair do |cb,version|
-            upload_cookbook(cb)
-            log_action("Uploaded cookbook #{cb} version #{version}")
+          if answer == "A"
+            all = true
+          elsif answer == "Q"
+            ui.msg "> Aborting cookbook alignment."
+            break
           end
 
-          env = Chef::Environment.load(@environment)
-          bumps.each_pair do |cb, version|
+          if all or answer == "Y"
+            log_action("* Uploading cookbook #{cb} version #{version}")
+            cb_obj = loader[cb]
+            uploader = Chef::CookbookUploader.new(cb_obj, @cb_path)
+            uploader.upload_cookbooks
             env.cookbook_versions[cb] = version
-            log_action("Bumped cookbook #{cb} to #{version} for environment #{@environment}")
+            bumped[cb] = version
+          else
+            ui.msg "* Skipping #{cb} cookbook"
+          end
+        end
+        if env.save
+          bumped.each do |cb, version|
+            log_action("* Bumping cookbook #{cb} to #{version} for environment #{@environment}")
             hubot_notify(cb, version, @environment)
           end
-          env.save
-
-          ui.msg "Done."
-        else
-          ui.msg "Aborting."
         end
       else
-        ui.msg "Nothing to do : #{@environment} has same versions as #{@branch}"
+        ui.msg "> Environment #{@environment} is up-to-date."
       end
-    end
-
-    def upload_cookbook(cb_name)
-      #cookbook names to actual cookbook objects
-      @loader ||= Chef::CookbookLoader.new(@cb_path)
-      cb = @loader[cb_name]
-
-      # uploading cookbooks, dependencies first
-      uploader = Chef::CookbookUploader.new(cb, @cb_path)
-      uploader.upload_cookbooks
     end
 
     # get cookbook for a known environment
@@ -156,15 +145,12 @@ module KnifeSharp
 
     # in your local dealer !
     def get_cookbook_local_versions
-      cbs = {}
-
+      cbs = Hash.new
       Dir.glob("#{@cb_path}/*").each do |cookbook|
-        cb_name = File.basename(cookbook)
         md = Chef::Cookbook::Metadata.new
         md.from_file("#{cookbook}/metadata.rb")
-        cbs[cb_name] = md.version
+        cbs[File.basename(cookbook)] = md.version
       end
-
       return cbs
     end
 
