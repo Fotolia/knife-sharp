@@ -37,9 +37,9 @@ module KnifeSharp
       if !avail_confs.empty?
         ui.msg "Available servers:"
         avail_confs.each do |file|
-          name = file.match(/#{Chef::Knife::chef_config_dir}\/knife-(?<srv>.*)\.rb/)
+          name = file.match(/#{Chef::Knife::chef_config_dir}\/knife-(\w+)\.rb/)
           prefix = (file == current_conf) ? ">> " : "   "
-          ui.msg "#{prefix}#{name[:srv]} (#{file})"
+          ui.msg "#{prefix}#{name[1]} (#{file})"
         end
       else
         ui.msg "No knife server configuration file found."
