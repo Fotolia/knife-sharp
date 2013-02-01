@@ -3,6 +3,7 @@ logging:
   destination: "~/.chef/sharp.log"
 global:
   git_cookbook_path: "/home/nico/sysadmin/chef/"
+  backupdir: "~/.chef/sharp/backups/"
 notification:
   hubot:
     enabled: true
