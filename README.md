@@ -85,6 +85,18 @@ logging:
 
 It will log uploads, bumps and databags to the standard logger format.
 
+## Backups
+Making a backup before a large change can be a lifesaver. Knife sharp can do it for you, easily
+<pre>
+$ knife sharp backup
+Backing up roles
+Backing up environments
+Backing up databags
+$
+</pre>
+
+All these items get stored in the place defined in your config file.
+
 # See also
 The damn good knife spork plugin from the etsy folks : https://github.com/jonlives/knife-spork
 
@@ -92,6 +104,7 @@ License
 =======
 3 clauses BSD
 
-Author
+Authors
 ======
-Nicolas Szalay < nico |at| rottenbytes |meh| info >
+Nicolas Szalay | https://github.com/rottenbytes
+Jonathan Amiez | https://github.com/josqu4red
