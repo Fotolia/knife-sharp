@@ -13,8 +13,9 @@ Gem::Specification.new do |s|
                     ext/sharp-config.yml
                     lib/knife-sharp.rb
                     lib/chef/knife/sharp-align.rb
-                    lib/chef/knife/sharp-history.rb
                     lib/chef/knife/sharp-backup.rb
+                    lib/chef/knife/sharp-history.rb
+                    lib/chef/knife/sharp-server.rb
                   ]
   s.homepage    = 'http://www.rottenbytes.info'
   s.add_dependency "grit", "~> 2.5.0"
