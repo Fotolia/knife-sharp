@@ -186,7 +186,7 @@ module KnifeSharp
         ui.msg "- #{db.join("/")} data bag item is remote only. Dumping to #{File.join(@db_path, "#{db.join("/")}.json")}"
         begin
           remote_db = Chef::DataBagItem.load(db.first, db.last).raw_data
-          Dir.mkdir(File.join(@db_path, db.first)) unless Dir.exists?(File.join(@db_path, db.first))
+          Dir.mkdir(File.join(@db_path, db.first)) unless File.exists?(File.join(@db_path, db.first))
           File.open(File.join(@db_path, "#{db.join("/")}.json"), "w") do |file|
             file.puts JSON.pretty_generate(remote_db)
           end
