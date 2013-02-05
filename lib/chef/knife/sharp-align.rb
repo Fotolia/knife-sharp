@@ -26,6 +26,7 @@ module KnifeSharp
 
     def run
       setup()
+      ui.msg "On server #{@chef_server}" if @chef_server
       ui.msg "Aligning cookbooks"
       align_cookbooks()
       ui.msg "Aligning data bags"
@@ -65,6 +66,18 @@ module KnifeSharp
         exit 1
       end
 
+      # Logger
+      if @cfg["logging"]["enabled"]
+        begin
+          require "logger"
+          log_file = File.expand_path(@cfg["logging"]["destination"])
+          @log = Logger.new(log_file)
+        rescue Exception => e
+          ui.error "Unable to set up logger (#{e.inspect})."
+          exit 1
+        end
+      end
+
       # Env setup
       @branch, @environment = name_args
       @chef_path = @cfg["global"]["git_cookbook_path"]
@@ -73,6 +86,8 @@ module KnifeSharp
       @cb_path = chefcfg.cookbook_path.is_a?(Array) ? chefcfg.cookbook_path.first : chefcfg.cookbook_path
       @db_path = chefcfg.data_bag_path.is_a?(Array) ? chefcfg.data_bag_path.first : chefcfg.data_bag_path
       @role_path = chefcfg.role_path.is_a?(Array) ? chefcfg.role_path.first : chefcfg.role_path
+
+      @chef_server = SharpServer.new.current_server
 
       # Checking current branch
       current_branch = Grit::Repo.new(@chef_path).head.name
@@ -112,12 +127,12 @@ module KnifeSharp
           if answer == "A"
             all = true
           elsif answer == "Q"
-            ui.msg "> Aborting cookbook alignment."
+            ui.msg "> Skipping next cookbooks alignment."
             break
           end
 
           if all or answer == "Y"
-            log_action("* Uploading cookbook #{cb} version #{version}")
+            ui.msg "* Uploading cookbook #{cb} version #{version}"
             cb_obj = loader[cb]
             uploader = Chef::CookbookUploader.new(cb_obj, @cb_path)
             uploader.upload_cookbooks
@@ -127,10 +142,11 @@ module KnifeSharp
             ui.msg "* Skipping #{cb} cookbook"
           end
         end
+
         if env.save
           bumped.each do |cb, version|
-            log_action("* Bumping cookbook #{cb} to #{version} for environment #{@environment}")
-            hubot_notify(cb, version, @environment)
+            ui.msg "* Bumping cookbook #{cb} to #{version} for environment #{@environment}"
+            log_action("bumping #{cb.name.to_s} to #{cb.version} for environment #{@environment}")
           end
         end
       else
@@ -220,6 +236,7 @@ module KnifeSharp
 
           if all or answer == "Y"
             ui.msg "* Updating #{name.join("/")} data bag item"
+            log_action("updating #{name.join("/")} data bag item")
             db = Chef::DataBagItem.new
             db.data_bag(name.first)
             db.raw_data = obj
@@ -307,6 +324,7 @@ module KnifeSharp
 
           if all or answer == "Y"
             ui.msg "* Updating #{name} role"
+            log_action("updating #{name} role")
             obj.save
           else
             ui.msg "* Skipping #{name} role"
@@ -320,39 +338,29 @@ module KnifeSharp
     ### Utility methods ###
 
     def log_action(message)
-      ui.msg(message)
+      # log file if enabled
+      @log.info(message) if @cfg["logging"]["enabled"]
 
-      if @cfg["logging"]["enabled"]
-        begin
-          require "logger"
-          log_file = File.expand_path(@cfg["logging"]["destination"])
-          log = Logger.new(log_file)
-          log.info(message)
-          log.close
-        rescue Exception => e
-          ui.error "Oops ! #{e.inspect} ! message to log was #{message}"
+      # any defined notification method (currently, only hubot, defined below)
+      if @cfg["notification"]
+        @cfg["notification"].each do |carrier, data|
+          if data["enabled"] and !data["skip"].include?(@chef_server)
+            send(carrier, data, message)
+          end
         end
       end
     end
 
-    def hubot_notify(cookbook, to_version, environment)
-      unless @cfg["notification"]["hubot"]["enabled"] == true and config[:quiet] == false
-        ui.msg "Aborting due to quiet or config disabled" if config[:debug]
-        return
-      end
-
+    def hubot(config = {}, message)
       begin
         require "net/http"
         require "uri"
-        uri = URI.parse(@cfg["notification"]["hubot"]["url"] + @cfg["notification"]["hubot"]["channel"])
-        user = @cfg["notification"]["hubot"]["username"]
+        uri = URI.parse("#{config["url"]}/#{config["channel"]}")
+        notif = "chef: #{message} by #{config["username"]}"
 
-        Net::HTTP.post_form(uri, { "cookbook" => cookbook,
-                                   "user" => user,
-                                   "to_version" => to_version,
-                                   "environment" => environment })
+        Net::HTTP.post_form(uri, { "message" => notif })
       rescue
-        ui.error "Oops ! could not notify hubot !"
+        ui.error "Unable to notify via hubot."
       end
     end
   end
