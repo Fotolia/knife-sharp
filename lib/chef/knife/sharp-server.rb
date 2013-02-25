@@ -1,7 +1,13 @@
 module KnifeSharp
   class SharpServer < Chef::Knife
 
-    banner "knife sharp server [SERVERNAME]"
+    banner "knife sharp server [SERVERNAME] [--machine]"
+
+    option :machine,
+      :short => '-m',
+      :long  => '--machine',
+      :description => "turn machine output on",
+      :default => false
 
     def run
       if File.exists?(knife_conf) and !File.symlink?(knife_conf)
@@ -31,16 +37,25 @@ module KnifeSharp
     end
 
     def list_configs
-      avail_confs = Dir.glob(File.join(Chef::Knife::chef_config_dir, "knife-*.rb"))
-      if !avail_confs.empty?
-        ui.msg "Available servers:"
-        avail_confs.each do |file|
-          server = extract_server(file)
-          prefix = (server == current_server) ? ">> " : "   "
-          ui.msg "#{prefix}#{server} (#{file})"
+      if config[:machine] == true
+        server = current_server()
+        if server
+          ui.msg server
+        else
+          ui.msg "invalid"
         end
       else
-        ui.msg "No knife server configuration file found."
+        avail_confs = Dir.glob(File.join(Chef::Knife::chef_config_dir, "knife-*.rb"))
+        if !avail_confs.empty?
+          ui.msg "Available servers:"
+          avail_confs.each do |file|
+            server = extract_server(file)
+            prefix = (server == current_server) ? ">> " : "   "
+            ui.msg "#{prefix}#{server} (#{file})"
+          end
+        else
+          ui.msg "No knife server configuration file found."
+        end
       end
     end
 
