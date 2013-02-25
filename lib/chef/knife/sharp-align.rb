@@ -318,7 +318,9 @@ module KnifeSharp
 
     def log_action(message)
       # log file if enabled
-      @log.info(message) if @cfg["logging"]["enabled"]
+      log_message = message
+      log_message += " on server #{@chef_server}" if @chef_server
+      @log.info(log_message) if @cfg["logging"]["enabled"]
 
       # any defined notification method (currently, only hubot, defined below)
       if @cfg["notification"]

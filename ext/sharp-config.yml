@@ -10,3 +10,4 @@ notification:
     url: "http://your.hubot.lan:18080/hubot/chef/bump/"
     channel: "foo"
     username: "Nicolas"
+    skip: [dev]
