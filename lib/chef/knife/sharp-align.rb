@@ -325,24 +325,27 @@ module KnifeSharp
       # any defined notification method (currently, only hubot, defined below)
       if @cfg["notification"]
         @cfg["notification"].each do |carrier, data|
-          if data["enabled"] and !data["skip"].include?(@chef_server)
-            send(carrier, data, message)
+          skipped = Array.new
+          skipped = data["skip"] if data["skip"]
+
+          if data["enabled"] and !skipped.include?(@chef_server)
+            send(carrier, message, data)
           end
         end
       end
     end
 
-    def hubot(config = {}, message)
+    def hubot(message, config={})
       begin
         require "net/http"
         require "uri"
         uri = URI.parse("#{config["url"]}/#{config["channel"]}")
         notif = "chef: #{message} by #{config["username"]}"
-
         Net::HTTP.post_form(uri, { "message" => notif })
       rescue
         ui.error "Unable to notify via hubot."
       end
     end
+
   end
 end
