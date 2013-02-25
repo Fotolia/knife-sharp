@@ -4,18 +4,12 @@ require 'grit'
 module KnifeSharp
   class SharpAlign < Chef::Knife
 
-    banner "knife sharp align BRANCH ENVIRONMENT [--debug] [--quiet]"
+    banner "knife sharp align BRANCH ENVIRONMENT [--debug]"
 
     option :debug,
       :short => '-d',
       :long  => '--debug',
       :description => "turn debug on",
-      :default => false
-
-    option :quiet,
-      :short => '-q',
-      :long => '--quiet',
-      :description => 'does not notifies',
       :default => false
 
     deps do
@@ -26,6 +20,7 @@ module KnifeSharp
 
     def run
       setup()
+      ui.msg "On server #{@chef_server}" if @chef_server
       ui.msg "Aligning cookbooks"
       align_cookbooks()
       ui.msg "Aligning data bags"
@@ -65,6 +60,18 @@ module KnifeSharp
         exit 1
       end
 
+      # Logger
+      if @cfg["logging"]["enabled"]
+        begin
+          require "logger"
+          log_file = File.expand_path(@cfg["logging"]["destination"])
+          @log = Logger.new(log_file)
+        rescue Exception => e
+          ui.error "Unable to set up logger (#{e.inspect})."
+          exit 1
+        end
+      end
+
       # Env setup
       @branch, @environment = name_args
       @chef_path = @cfg["global"]["git_cookbook_path"]
@@ -73,6 +80,9 @@ module KnifeSharp
       @cb_path = chefcfg.cookbook_path.is_a?(Array) ? chefcfg.cookbook_path.first : chefcfg.cookbook_path
       @db_path = chefcfg.data_bag_path.is_a?(Array) ? chefcfg.data_bag_path.first : chefcfg.data_bag_path
       @role_path = chefcfg.role_path.is_a?(Array) ? chefcfg.role_path.first : chefcfg.role_path
+
+      @chef_server = SharpServer.new.current_server
+      @loader = Chef::CookbookLoader.new(@cb_path)
 
       # Checking current branch
       current_branch = Grit::Repo.new(@chef_path).head.name
@@ -86,8 +96,8 @@ module KnifeSharp
 
     def align_cookbooks
       updated_versions = Hash.new()
-      local_versions = get_cookbook_local_versions()
-      remote_versions = get_cookbook_versions_from_env(@environment)
+      local_versions = Hash[Dir.glob("#{@cb_path}/*").map {|cb| [File.basename(cb), @loader[File.basename(cb)].version] }]
+      remote_versions = Chef::Environment.load(@environment).cookbook_versions.each_value {|v| v.gsub!("= ", "")}
 
       (local_versions.keys - remote_versions.keys).each do |cb|
         updated_versions[cb] = local_versions[cb]
@@ -101,57 +111,42 @@ module KnifeSharp
         end
       end
 
-      bumped = Hash.new
       if !updated_versions.empty?
         all = false
+        bumped = Array.new
         env = Chef::Environment.load(@environment)
-        loader = Chef::CookbookLoader.new(@cb_path)
         updated_versions.each_pair do |cb,version|
           answer = ui.ask_question("Update #{cb} cookbook item on server ? Y/N/(A)ll/(Q)uit ", :default => "N").upcase unless all
 
           if answer == "A"
             all = true
           elsif answer == "Q"
-            ui.msg "> Aborting cookbook alignment."
+            ui.msg "> Skipping next cookbooks alignment."
             break
           end
 
           if all or answer == "Y"
-            log_action("* Uploading cookbook #{cb} version #{version}")
-            cb_obj = loader[cb]
-            uploader = Chef::CookbookUploader.new(cb_obj, @cb_path)
-            uploader.upload_cookbooks
             env.cookbook_versions[cb] = version
-            bumped[cb] = version
+            bumped << @loader[cb]
           else
             ui.msg "* Skipping #{cb} cookbook"
           end
         end
-        if env.save
-          bumped.each do |cb, version|
-            log_action("* Bumping cookbook #{cb} to #{version} for environment #{@environment}")
-            hubot_notify(cb, version, @environment)
+
+        unless bumped.empty?
+          ui.msg "* Uploading cookbook(s) #{bumped.map{|cb| cb.name.to_s}.join(",")}"
+          uploader = Chef::CookbookUploader.new(bumped, @cb_path)
+          uploader.upload_cookbooks
+          if env.save
+            bumped.each do |cb|
+              ui.msg "* Bumping #{cb.name.to_s} to #{cb.version} for environment #{@environment}"
+              log_action("bumping #{cb.name.to_s} to #{cb.version} for environment #{@environment}")
+            end
           end
         end
       else
         ui.msg "> Environment #{@environment} is up-to-date."
       end
-    end
-
-    # get cookbook for a known environment
-    def get_cookbook_versions_from_env(env_name)
-      Chef::Environment.load(env_name).cookbook_versions.each_value {|v| v.gsub!("= ", "")}
-    end
-
-    # in your local dealer !
-    def get_cookbook_local_versions
-      cbs = Hash.new
-      Dir.glob("#{@cb_path}/*").each do |cookbook|
-        md = Chef::Cookbook::Metadata.new
-        md.from_file("#{cookbook}/metadata.rb")
-        cbs[File.basename(cookbook)] = md.version
-      end
-      return cbs
     end
 
     ### Databag methods ###
@@ -220,6 +215,7 @@ module KnifeSharp
 
           if all or answer == "Y"
             ui.msg "* Updating #{name.join("/")} data bag item"
+            log_action("updating #{name.join("/")} data bag item")
             db = Chef::DataBagItem.new
             db.data_bag(name.first)
             db.raw_data = obj
@@ -307,6 +303,7 @@ module KnifeSharp
 
           if all or answer == "Y"
             ui.msg "* Updating #{name} role"
+            log_action("updating #{name} role")
             obj.save
           else
             ui.msg "* Skipping #{name} role"
@@ -320,39 +317,31 @@ module KnifeSharp
     ### Utility methods ###
 
     def log_action(message)
-      ui.msg(message)
+      # log file if enabled
+      log_message = message
+      log_message += " on server #{@chef_server}" if @chef_server
+      @log.info(log_message) if @cfg["logging"]["enabled"]
 
-      if @cfg["logging"]["enabled"]
-        begin
-          require "logger"
-          log_file = File.expand_path(@cfg["logging"]["destination"])
-          log = Logger.new(log_file)
-          log.info(message)
-          log.close
-        rescue Exception => e
-          ui.error "Oops ! #{e.inspect} ! message to log was #{message}"
+      # any defined notification method (currently, only hubot, defined below)
+      if @cfg["notification"]
+        @cfg["notification"].each do |carrier, data|
+          if data["enabled"] and !data["skip"].include?(@chef_server)
+            send(carrier, data, message)
+          end
         end
       end
     end
 
-    def hubot_notify(cookbook, to_version, environment)
-      unless @cfg["notification"]["hubot"]["enabled"] == true and config[:quiet] == false
-        ui.msg "Aborting due to quiet or config disabled" if config[:debug]
-        return
-      end
-
+    def hubot(config = {}, message)
       begin
         require "net/http"
         require "uri"
-        uri = URI.parse(@cfg["notification"]["hubot"]["url"] + @cfg["notification"]["hubot"]["channel"])
-        user = @cfg["notification"]["hubot"]["username"]
+        uri = URI.parse("#{config["url"]}/#{config["channel"]}")
+        notif = "chef: #{message} by #{config["username"]}"
 
-        Net::HTTP.post_form(uri, { "cookbook" => cookbook,
-                                   "user" => user,
-                                   "to_version" => to_version,
-                                   "environment" => environment })
+        Net::HTTP.post_form(uri, { "message" => notif })
       rescue
-        ui.error "Oops ! could not notify hubot !"
+        ui.error "Unable to notify via hubot."
       end
     end
   end
