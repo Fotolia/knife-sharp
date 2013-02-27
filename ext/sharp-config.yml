@@ -11,3 +11,6 @@ notification:
     channel: "foo"
     username: "Nicolas"
     skip: [dev]
+# key is the name of your server (in a knife sharp server sense)
+sandboxnico:
+  ignore_cookbooks: [ "tests" ]
