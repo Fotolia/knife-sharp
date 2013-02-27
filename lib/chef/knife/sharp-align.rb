@@ -116,7 +116,19 @@ module KnifeSharp
         bumped = Array.new
         env = Chef::Environment.load(@environment)
         updated_versions.each_pair do |cb,version|
-          answer = ui.ask_question("Update #{cb} cookbook item on server ? Y/N/(A)ll/(Q)uit ", :default => "N").upcase unless all
+          answer = nil
+
+          if @cfg[@chef_server]
+            if @cfg[@chef_server]["ignore_cookbooks"]
+              if @cfg[@chef_server]["ignore_cookbooks"].include?(cb)
+                answer = "N"
+              end
+            end
+          end
+
+          if answer.nil?
+            answer = ui.ask_question("Update #{cb} cookbook item on server ? Y/N/(A)ll/(Q)uit ", :default => "N").upcase unless all
+          end
 
           if answer == "A"
             all = true
