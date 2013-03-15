@@ -138,7 +138,8 @@ module KnifeSharp
           end
 
           if all or answer == "Y"
-            env.cookbook_versions[cb] = version
+            # Force "= a.b.c" in cookbook version, as chef11 will not accept "a.b.c"
+            env.cookbook_versions[cb] = "= #{version}"
             bumped << @loader[cb]
           else
             ui.msg "* Skipping #{cb} cookbook"
