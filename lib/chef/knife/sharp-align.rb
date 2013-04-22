@@ -6,6 +6,20 @@ module KnifeSharp
 
     banner "knife sharp align BRANCH ENVIRONMENT [OPTS]"
 
+    #[:cookbooks, :databags, :roles].each do |opt|
+    #  option opt,
+    #    :short => "-#{opt.to_s[0].upcase}",
+    #    :long => "--#{opt}-only",
+    #    :description => "sync #{opt} only",
+    #    :default => false
+    #end
+
+    option :dump_remote_only,
+      :short => "-B",
+      :long => "--dump-remote-only",
+      :description => "dump items not present locally (roles/databags)",
+      :default => false
+
     deps do
       require 'chef/cookbook/metadata'
       require 'chef/cookbook_loader'
@@ -20,13 +34,14 @@ module KnifeSharp
       check_roles
 
       # All questions asked, can we proceed ?
-      if @cookbooks.empty?
+      if @cookbooks.empty? and @databags.empty?
         ui.msg "Nothing else to do"
         exit 0
       end
 
       ui.confirm(ui.color("> Proceed", :red))
       bump_cookbooks
+      upload_databags
     end
 
     def setup
@@ -203,41 +218,45 @@ module KnifeSharp
         return
       end
 
-      # Create new data bags on server
-      (local_dbs - remote_dbs).each do |db|
-        ui.msg "+ #{db.join("/")} data bag item is local only. Creating"
-        begin
-          local_db = Chef::DataBagItem.new
-          local_db.data_bag(db.first)
-          local_db.raw_data = JSON::load(File.read(File.join(@db_path, "#{db.join("/")}.json")))
-          local_db.save
-        rescue Exception => e
-          ui.error "Unable to create #{db.join("/")} data bag item (#{e.message})"
+      # Dump missing data bags locally
+      (remote_dbs - local_dbs).each do |db|
+        ui.msg "* #{db.join("/")} data bag item is remote only"
+        if config[:dump_remote_only]
+          ui.msg "* Dumping to #{File.join(@db_path, "#{db.join("/")}.json")}"
+          begin
+            remote_db = Chef::DataBagItem.load(db.first, db.last).raw_data
+            Dir.mkdir(File.join(@db_path, db.first)) unless File.exists?(File.join(@db_path, db.first))
+            File.open(File.join(@db_path, "#{db.join("/")}.json"), "w") do |file|
+              file.puts JSON.pretty_generate(remote_db)
+            end
+          rescue Exception => e
+            ui.error "Unable to dump #{db.join("/")} data bag item (#{e.message})"
+          end
         end
       end
 
-      # Dump missing data bags locally
-      (remote_dbs - local_dbs).each do |db|
-        ui.msg "* #{db.join("/")} data bag item is remote only. Dumping to #{File.join(@db_path, "#{db.join("/")}.json")}"
+      # Create new data bags on server
+      (local_dbs - remote_dbs).each do |db|
         begin
-          remote_db = Chef::DataBagItem.load(db.first, db.last).raw_data
-          Dir.mkdir(File.join(@db_path, db.first)) unless File.exists?(File.join(@db_path, db.first))
-          File.open(File.join(@db_path, "#{db.join("/")}.json"), "w") do |file|
-            file.puts JSON.pretty_generate(remote_db)
-          end
+          local_db = JSON::load(File.read(File.join(@db_path, "#{db.join("/")}.json")))
+          updated_dbs[db] = local_db
+          ui.msg "* #{db.join("/")} data bag item is local only"
         rescue Exception => e
-          ui.error "Unable to dump #{db.join("/")} data bag item (#{e.message})"
+          ui.error "Unable to load #{db.join("/")} data bag item (#{e.message})"
         end
       end
 
       # Compare roles common to local and remote
       (remote_dbs & local_dbs).each do |db|
-        remote_db = Chef::DataBagItem.load(db.first, db.last).raw_data
-        local_db = JSON::load(File.read(File.join(@db_path, "#{db.join("/")}.json")))
-
-        if remote_db != local_db
-          updated_dbs[db] = local_db
-          ui.msg("* #{db.join("/")} data bag item is not up-to-date")
+        begin
+          remote_db = Chef::DataBagItem.load(db.first, db.last).raw_data
+          local_db = JSON::load(File.read(File.join(@db_path, "#{db.join("/")}.json")))
+          if remote_db != local_db
+            updated_dbs[db] = local_db
+            ui.msg("* #{db.join("/")} data bag item is not up-to-date")
+          end
+        rescue Exception => e
+          ui.error "Unable to load #{db.join("/")} data bag item (#{e.message})"
         end
       end
 
@@ -254,18 +273,30 @@ module KnifeSharp
           end
 
           if all or answer == "Y"
-            ui.msg "* Updating #{name.join("/")} data bag item"
-            log_action("updating #{name.join("/")} data bag item")
-            db = Chef::DataBagItem.new
-            db.data_bag(name.first)
-            db.raw_data = obj
-            db.save
+            @databags[name] = obj
           else
             ui.msg "* Skipping #{name.join("/")} data bag item"
           end
         end
       else
         ui.msg "* Data bags are up-to-date."
+      end
+    end
+
+    def update_databags
+      unless @databags.empty?
+        @databags.each do |name, obj|
+          begin
+            db = Chef::DataBagItem.new
+            db.data_bag(name.first)
+            db.raw_data = obj
+            db.save
+            ui.msg "* Updating #{name.join("/")} data bag item"
+            log_action("updating #{name.join("/")} data bag item")
+          rescue Exception => e
+            ui.error "Unable to update #{name.join("/")} data bag item"
+          end
+        end
       end
     end
 
@@ -391,6 +422,5 @@ module KnifeSharp
         ui.error "Unable to notify via hubot."
       end
     end
-
   end
 end
