@@ -32,7 +32,7 @@ module KnifeSharp
     def setup
       # Checking args
       if name_args.count != 2
-        ui.error "Usage : knife align BRANCH ENVIRONMENT [--debug]"
+        show_usage
         exit 1
       end
 
@@ -99,13 +99,15 @@ module KnifeSharp
       local_versions = Hash[Dir.glob("#{@cb_path}/*").map {|cb| [File.basename(cb), @loader[File.basename(cb)].version] }]
       remote_versions = Chef::Environment.load(@environment).cookbook_versions.each_value {|v| v.gsub!("= ", "")}
 
+      # get local-only cookbooks
       (local_versions.keys - remote_versions.keys).each do |cb|
         updated_versions[cb] = local_versions[cb]
         ui.msg "* #{cb} is local only (version #{local_versions[cb]})"
       end
 
+      # get cookbooks not up-to-date
       (remote_versions.keys & local_versions.keys).each do |cb|
-        if remote_versions[cb] != local_versions[cb]
+        if Chef::VersionConstraint.new("> #{remote_versions[cb]}").include?(local_versions[cb])
           updated_versions[cb] = local_versions[cb]
           ui.msg "* #{cb} is not up-to-date (local: #{local_versions[cb]}/remote: #{remote_versions[cb]})"
         end
