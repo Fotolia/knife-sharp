@@ -4,13 +4,7 @@ require 'grit'
 module KnifeSharp
   class SharpAlign < Chef::Knife
 
-    banner "knife sharp align BRANCH ENVIRONMENT [--debug]"
-
-    option :debug,
-      :short => '-d',
-      :long  => '--debug',
-      :description => "turn debug on",
-      :default => false
+    banner "knife sharp align BRANCH ENVIRONMENT [OPTS]"
 
     deps do
       require 'chef/cookbook/metadata'
@@ -21,12 +15,18 @@ module KnifeSharp
     def run
       setup()
       ui.msg "On server #{@chef_server}" if @chef_server
-      ui.msg "Aligning cookbooks"
-      align_cookbooks()
-      ui.msg "Aligning data bags"
-      align_databags()
-      ui.msg "Aligning roles"
-      align_roles()
+      check_cookbooks
+      check_databags
+      check_roles
+
+      # All questions asked, can we proceed ?
+      if @cookbooks.empty?
+        ui.msg "Nothing else to do"
+        exit 0
+      end
+
+      ui.confirm(ui.color("> Proceed", :red))
+      bump_cookbooks
     end
 
     def setup
@@ -44,11 +44,22 @@ module KnifeSharp
           @cfg = YAML::load_file(File.expand_path(cfg_file))
           loaded = true
         rescue Exception => e
-          ui.error "Error on loading config : #{e.inspect}" if config[:debug]
+          ui.error "Error on loading config : #{e.inspect}" if config[:verbosity] > 0
         end
       end
       unless loaded == true
         ui.error "config could not be loaded ! Tried the following files : #{cfg_files.join(", ")}"
+        exit 1
+      end
+
+      # Env setup
+      @branch, @environment = name_args
+      @chef_path = @cfg["global"]["git_cookbook_path"]
+
+      # Checking current branch
+      current_branch = Grit::Repo.new(@chef_path).head.name
+      if @branch != current_branch then
+        ui.error "Git repo is actually on branch #{current_branch} but you want to align using #{@branch}. Checkout to the desired one."
         exit 1
       end
 
@@ -72,10 +83,6 @@ module KnifeSharp
         end
       end
 
-      # Env setup
-      @branch, @environment = name_args
-      @chef_path = @cfg["global"]["git_cookbook_path"]
-
       chefcfg = Chef::Config
       @cb_path = chefcfg.cookbook_path.is_a?(Array) ? chefcfg.cookbook_path.first : chefcfg.cookbook_path
       @db_path = chefcfg.data_bag_path.is_a?(Array) ? chefcfg.data_bag_path.first : chefcfg.data_bag_path
@@ -84,20 +91,29 @@ module KnifeSharp
       @chef_server = SharpServer.new.current_server
       @loader = Chef::CookbookLoader.new(@cb_path)
 
-      # Checking current branch
-      current_branch = Grit::Repo.new(@chef_path).head.name
-      if @branch != current_branch then
-        ui.error "Git repo is actually on branch #{current_branch} but you want to align using #{@branch}. Checkout to the desired one."
-        exit 1
-      end
+      @cookbooks = Array.new
+      @databags = Hash.new
+      @roles = Hash.new
     end
 
     ### Cookbook methods ###
 
-    def align_cookbooks
-      updated_versions = Hash.new()
+    def check_cookbooks
+      unless File.exists?(@cb_path)
+        ui.warn "Bad cookbook path, skipping cookbook sync."
+        return
+      end
+
+      ui.msg(ui.color("== Cookbooks ==", :cyan))
+
+      updated_versions = Hash.new
       local_versions = Hash[Dir.glob("#{@cb_path}/*").map {|cb| [File.basename(cb), @loader[File.basename(cb)].version] }]
       remote_versions = Chef::Environment.load(@environment).cookbook_versions.each_value {|v| v.gsub!("= ", "")}
+
+      if local_versions.empty?
+        ui.warn "No local cookbooks found, is the cookbook path correct ? (#{@cb_path})"
+        return
+      end
 
       # get local-only cookbooks
       (local_versions.keys - remote_versions.keys).each do |cb|
@@ -113,70 +129,79 @@ module KnifeSharp
         end
       end
 
+      if @cfg[@chef_server] and @cfg[@chef_server].has_key?("ignore_cookbooks")
+        (updated_versions.keys & @cfg[@chef_server]["ignore_cookbooks"]).each do |cb|
+          updated_versions.delete(cb)
+          ui.msg "* Skipping #{cb} cookbook (ignore list)"
+        end
+      end
+
       if !updated_versions.empty?
         all = false
-        bumped = Array.new
-        env = Chef::Environment.load(@environment)
         updated_versions.each_pair do |cb,version|
-          answer = nil
-
-          if @cfg[@chef_server]
-            if @cfg[@chef_server]["ignore_cookbooks"]
-              if @cfg[@chef_server]["ignore_cookbooks"].include?(cb)
-                answer = "N"
-              end
-            end
-          end
-
-          if answer.nil?
-            answer = ui.ask_question("Update #{cb} cookbook item on server ? Y/N/(A)ll/(Q)uit ", :default => "N").upcase unless all
-          end
+          answer = ui.ask_question("> Update #{cb} cookbook to #{version} on server ? Y/N/(A)ll/(Q)uit ", :default => "N").upcase unless all
 
           if answer == "A"
             all = true
           elsif answer == "Q"
-            ui.msg "> Skipping next cookbooks alignment."
+            ui.msg "* Skipping next cookbooks alignment."
             break
           end
 
           if all or answer == "Y"
-            # Force "= a.b.c" in cookbook version, as chef11 will not accept "a.b.c"
-            env.cookbook_versions[cb] = "= #{version}"
-            bumped << @loader[cb]
+            @cookbooks << cb
           else
             ui.msg "* Skipping #{cb} cookbook"
           end
         end
+      else
+        ui.msg "* Environment #{@environment} is up-to-date."
+      end
+    end
 
-        unless bumped.empty?
-          ui.msg "* Uploading cookbook(s) #{bumped.map{|cb| cb.name.to_s}.join(",")}"
-          uploader = Chef::CookbookUploader.new(bumped, @cb_path)
-          uploader.upload_cookbooks
-          if env.save
-            bumped.each do |cb|
-              ui.msg "* Bumping #{cb.name.to_s} to #{cb.version} for environment #{@environment}"
-              log_action("bumping #{cb.name.to_s} to #{cb.version} for environment #{@environment}")
-            end
+
+    def bump_cookbooks
+      unless @cookbooks.empty?
+        env = Chef::Environment.load(@environment)
+        cbs = Array.new
+        @cookbooks.each do |cb_name|
+          cb = @loader[cb_name]
+          # Force "= a.b.c" in cookbook version, as chef11 will not accept "a.b.c"
+          env.cookbook_versions[cb_name] = "= #{cb.version}"
+          cbs << cb
+        end
+
+        ui.msg "* Uploading cookbook(s) #{@cookbooks.join(", ")}"
+        uploader = Chef::CookbookUploader.new(cbs, @cb_path)
+        uploader.upload_cookbooks
+
+        if env.save
+          cbs.each do |cb|
+            ui.msg "* Bumping #{cb.name} to #{cb.version} for environment #{@environment}"
+            log_action("bumping #{cb.name} to #{cb.version} for environment #{@environment}")
           end
         end
-      else
-        ui.msg "> Environment #{@environment} is up-to-date."
       end
     end
 
     ### Databag methods ###
 
-    def align_databags
+    def check_databags
       unless File.exists?(@db_path)
         ui.warn "Bad data bag path, skipping data bag sync."
         return
       end
 
+      ui.msg(ui.color("== Data bags ==", :cyan))
+
       updated_dbs = Hash.new
       local_dbs = Dir.glob(File.join(@db_path, "**/*.json")).map {|f| [File.dirname(f).split("/").last, File.basename(f, ".json")]}
       remote_dbs = Chef::DataBag.list.keys.map {|db| Chef::DataBag.load(db).keys.map{|dbi| [db, dbi]}}.flatten(1)
 
-      ui.warn "No local data bags found, is the role path correct ? (#{@role_path})" if local_dbs.empty?
+      if local_dbs.empty?
+        ui.warn "No local data bags found, is the data bag path correct ? (#{@db_path})"
+        return
+      end
 
       # Create new data bags on server
       (local_dbs - remote_dbs).each do |db|
@@ -193,7 +218,7 @@ module KnifeSharp
 
       # Dump missing data bags locally
       (remote_dbs - local_dbs).each do |db|
-        ui.msg "- #{db.join("/")} data bag item is remote only. Dumping to #{File.join(@db_path, "#{db.join("/")}.json")}"
+        ui.msg "* #{db.join("/")} data bag item is remote only. Dumping to #{File.join(@db_path, "#{db.join("/")}.json")}"
         begin
           remote_db = Chef::DataBagItem.load(db.first, db.last).raw_data
           Dir.mkdir(File.join(@db_path, db.first)) unless File.exists?(File.join(@db_path, db.first))
@@ -219,12 +244,12 @@ module KnifeSharp
       if !updated_dbs.empty?
         all = false
         updated_dbs.each do |name, obj|
-          answer = ui.ask_question("Update #{name.join("/")} data bag item on server ? Y/N/(A)ll/(Q)uit ", :default => "N").upcase unless all
+          answer = ui.ask_question("> Update #{name.join("/")} data bag item on server ? Y/N/(A)ll/(Q)uit ", :default => "N").upcase unless all
 
           if answer == "A"
             all = true
           elsif answer == "Q"
-            ui.msg "> Aborting data bag alignment."
+            ui.msg "* Aborting data bag alignment."
             break
           end
 
@@ -240,13 +265,13 @@ module KnifeSharp
           end
         end
       else
-        ui.msg "> Data bags are up-to-date."
+        ui.msg "* Data bags are up-to-date."
       end
     end
 
     ### Role methods ###
 
-    def align_roles
+    def check_roles
       # role sections to compare (methods)
       to_check = {
         "env_run_lists" => "run list",
@@ -259,15 +284,20 @@ module KnifeSharp
         return
       end
 
+      ui.msg(ui.color("== Roles ==", :cyan))
+
       updated_roles = Hash.new
       local_roles = Dir.glob(File.join(@role_path, "*.json")).map {|file| File.basename(file, ".json")}
       remote_roles = Chef::Role.list.keys
 
-      ui.warn "No local roles found, is the role path correct ? (#{@role_path})" if local_roles.empty?
+      if local_roles.empty?
+        ui.warn "No local roles found, is the role path correct ? (#{@role_path})"
+        return
+      end
 
       # Create new roles on server
       (local_roles - remote_roles).each do |role|
-        ui.msg "+ #{role} role is local only. Creating"
+        ui.msg "* #{role} role is local only. Creating"
         begin
           local_role = Chef::Role.from_disk(role)
           local_role.save
@@ -278,7 +308,7 @@ module KnifeSharp
 
       # Dump missing roles locally
       (remote_roles - local_roles).each do |role|
-        ui.msg "- #{role} role is remote only. Dumping to #{File.join(@role_path, "#{role}.json")}"
+        ui.msg "* #{role} role is remote only. Dumping to #{File.join(@role_path, "#{role}.json")}"
         begin
           remote_role = Chef::Role.load(role)
           File.open(File.join(@role_path, "#{role}.json"), "w") do |file|
@@ -307,12 +337,12 @@ module KnifeSharp
       if !updated_roles.empty?
         all = false
         updated_roles.each do |name, obj|
-          answer = ui.ask_question("Update #{name} role on server ? Y/N/(A)ll/(Q)uit ", :default => "N").upcase unless all
+          answer = ui.ask_question("> Update #{name} role on server ? Y/N/(A)ll/(Q)uit ", :default => "N").upcase unless all
 
           if answer == "A"
             all = true
           elsif answer == "Q"
-            ui.msg "> Aborting role alignment."
+            ui.msg "* Aborting role alignment."
             break
           end
 
@@ -325,7 +355,7 @@ module KnifeSharp
           end
         end
       else
-        ui.msg "> Roles are up-to-date."
+        ui.msg "* Roles are up-to-date."
       end
     end
 
