@@ -28,7 +28,7 @@ module KnifeSharp
 
     def run
       setup()
-      ui.msg "On server #{@chef_server}" if @chef_server
+      ui.msg(ui.color("On server #{@chef_server}", :bold)) if @chef_server
       check_cookbooks
       check_databags
       check_roles
@@ -39,10 +39,10 @@ module KnifeSharp
         exit 0
       end
 
-      ui.confirm(ui.color("> Proceed", :red))
+      ui.confirm(ui.color("> Proceed ", :bold))
       bump_cookbooks
-      upload_databags
-      upload_roles
+      update_databags
+      update_roles
     end
 
     def setup
@@ -120,7 +120,7 @@ module KnifeSharp
         return
       end
 
-      ui.msg(ui.color("== Cookbooks ==", :cyan))
+      ui.msg(ui.color("== Cookbooks ==", :bold))
 
       updated_versions = Hash.new
       local_versions = Hash[Dir.glob("#{@cb_path}/*").map {|cb| [File.basename(cb), @loader[File.basename(cb)].version] }]
@@ -208,7 +208,7 @@ module KnifeSharp
         return
       end
 
-      ui.msg(ui.color("== Data bags ==", :cyan))
+      ui.msg(ui.color("== Data bags ==", :bold))
 
       updated_dbs = Hash.new
       local_dbs = Dir.glob(File.join(@db_path, "**/*.json")).map {|f| [File.dirname(f).split("/").last, File.basename(f, ".json")]}
@@ -316,7 +316,7 @@ module KnifeSharp
         return
       end
 
-      ui.msg(ui.color("== Roles ==", :cyan))
+      ui.msg(ui.color("== Roles ==", :bold))
 
       updated_roles = Hash.new
       local_roles = Dir.glob(File.join(@role_path, "*.json")).map {|file| File.basename(file, ".json")}
