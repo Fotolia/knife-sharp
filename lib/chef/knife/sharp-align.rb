@@ -34,7 +34,7 @@ module KnifeSharp
       check_roles
 
       # All questions asked, can we proceed ?
-      if @cookbooks.empty? and @databags.empty?
+      if @cookbooks.empty? and @databags.empty? and @roles.empty?
         ui.msg "Nothing else to do"
         exit 0
       end
@@ -42,6 +42,7 @@ module KnifeSharp
       ui.confirm(ui.color("> Proceed", :red))
       bump_cookbooks
       upload_databags
+      upload_roles
     end
 
     def setup
@@ -326,27 +327,30 @@ module KnifeSharp
         return
       end
 
-      # Create new roles on server
-      (local_roles - remote_roles).each do |role|
-        ui.msg "* #{role} role is local only. Creating"
-        begin
-          local_role = Chef::Role.from_disk(role)
-          local_role.save
-        rescue Exception => e
-          ui.error "Unable to create #{role} role (#{e.message})"
+      # Dump missing roles locally
+      (remote_roles - local_roles).each do |role|
+        ui.msg "* #{role} role is remote only"
+        if config[:dump_remote_only]
+          ui.msg "* Dumping to #{File.join(@role_path, "#{role}.json")}"
+          begin
+            remote_role = Chef::Role.load(role)
+            File.open(File.join(@role_path, "#{role}.json"), "w") do |file|
+              file.puts JSON.pretty_generate(remote_role)
+            end
+          rescue Exception => e
+            ui.error "Unable to dump #{role} role (#{e.message})"
+          end
         end
       end
 
-      # Dump missing roles locally
-      (remote_roles - local_roles).each do |role|
-        ui.msg "* #{role} role is remote only. Dumping to #{File.join(@role_path, "#{role}.json")}"
+      # Create new roles on server
+      (local_roles - remote_roles).each do |role|
         begin
-          remote_role = Chef::Role.load(role)
-          File.open(File.join(@role_path, "#{role}.json"), "w") do |file|
-            file.puts JSON.pretty_generate(remote_role)
-          end
+          local_role = Chef::Role.from_disk(role)
+          updated_roles[role] = local_role
+          ui.msg "* #{role} role is local only"
         rescue Exception => e
-          ui.error "Unable to dump #{role} role (#{e.message})"
+          ui.error "Unable to load #{role} role (#{e.message})"
         end
       end
 
@@ -378,15 +382,27 @@ module KnifeSharp
           end
 
           if all or answer == "Y"
-            ui.msg "* Updating #{name} role"
-            log_action("updating #{name} role")
-            obj.save
+            @roles[name] = obj
           else
             ui.msg "* Skipping #{name} role"
           end
         end
       else
         ui.msg "* Roles are up-to-date."
+      end
+    end
+
+    def update_roles
+      unless @roles.empty?
+        @roles.each do |name, obj|
+          begin
+            obj.save
+            ui.msg "* Updating #{name} role"
+            log_action("updating #{name} role")
+          rescue Exception => e
+            ui.error "Unable to update #{name} role"
+          end
+        end
       end
     end
 
