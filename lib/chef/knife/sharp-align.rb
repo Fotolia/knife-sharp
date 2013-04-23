@@ -6,13 +6,13 @@ module KnifeSharp
 
     banner "knife sharp align BRANCH ENVIRONMENT [OPTS]"
 
-    #[:cookbooks, :databags, :roles].each do |opt|
-    #  option opt,
-    #    :short => "-#{opt.to_s[0].upcase}",
-    #    :long => "--#{opt}-only",
-    #    :description => "sync #{opt} only",
-    #    :default => false
-    #end
+    [:cookbooks, :databags, :roles].each do |opt|
+      option opt,
+        :short => "-#{opt.to_s[0].upcase}",
+        :long => "--#{opt}-only",
+        :description => "sync #{opt} only",
+        :default => false
+    end
 
     option :dump_remote_only,
       :short => "-B",
@@ -29,9 +29,9 @@ module KnifeSharp
     def run
       setup()
       ui.msg(ui.color("On server #{@chef_server}", :bold)) if @chef_server
-      check_cookbooks
-      check_databags
-      check_roles
+      check_cookbooks if @do_cookbooks
+      check_databags if @do_databags
+      check_roles if @do_roles
 
       # All questions asked, can we proceed ?
       if @cookbooks.empty? and @databags.empty? and @roles.empty?
@@ -40,9 +40,9 @@ module KnifeSharp
       end
 
       ui.confirm(ui.color("> Proceed ", :bold))
-      bump_cookbooks
-      update_databags
-      update_roles
+      bump_cookbooks if @do_cookbooks
+      update_databags if @do_databags
+      update_roles if @do_roles
     end
 
     def setup
@@ -50,6 +50,13 @@ module KnifeSharp
       if name_args.count != 2
         show_usage
         exit 1
+      end
+
+      # check cli flags
+      if config[:cookbooks] or config[:databags] or config[:roles]
+        @do_cookbooks, @do_databags, @do_roles = config[:cookbooks], config[:databags], config[:roles]
+      else
+        @do_cookbooks, @do_databags, @do_roles = true, true, true
       end
 
       # Sharp config
