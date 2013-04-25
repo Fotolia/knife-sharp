@@ -8,7 +8,7 @@ module KnifeSharp
 
     [:cookbooks, :databags, :roles].each do |opt|
       option opt,
-        :short => "-#{opt.to_s[0].upcase}",
+        :short => "-#{opt.to_s[0,1].upcase}",
         :long => "--#{opt}-only",
         :description => "sync #{opt} only",
         :default => false
