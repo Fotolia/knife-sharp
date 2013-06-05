@@ -14,3 +14,6 @@ notification:
 # key is the name of your server (in a knife sharp server sense)
 sandboxnico:
   ignore_cookbooks: [ "tests" ]
+rollback:
+  enabled: true
+  destination: "/home/nico/.chef/sharp/rollbacks/"
