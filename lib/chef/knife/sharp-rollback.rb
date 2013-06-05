@@ -29,28 +29,38 @@ module KnifeSharp
 
     def run()
       setup()
-      list_rollback_points() if @do_list
-      show_rollback_point(@identifier) if @do_show
-      rollback_to(@identifier) if @do_rollback
-    end
 
-    def setup()
-      @do_list, @do_show, @do_rollback = false, false, false
-
-      # check cli flags
       if config[:list]
-        @do_list = true
+        list_rollback_points()
+        exit 0
       end
 
       if config[:show]
-        @do_show = true
-        @identifier = name_args
+        identifier = name_args
+        show_rollback_point(identifier)
+        exit 0
       end
 
       if config[:to]
-        @do_rollback = true
-        @identifier = name_args
+        identifier = name_args
+        rollback_to(identifier)
+        exit 0
       end
+    end
+
+    def setup()
+      actions = 0
+      [:to, :list, :show].each do |action|
+        if config[action]
+          actions+=1
+        end
+      end
+
+      if actions > 1
+        ui.error("please specify only one action")
+        exit 1
+      end
+
 
       # Sharp config
       cfg_files = [ "/etc/sharp-config.yml", "~/.chef/sharp-config.yml" ]
