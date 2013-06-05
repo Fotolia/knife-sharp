@@ -127,6 +127,17 @@ logging:
 
 It will log uploads, bumps and databags to the standard logger format.
 
+# ZSH completion
+
+want a completion on changing servers ?
+
+<pre>
+alias kss="knife sharp server"
+
+function knife_servers { reply=($(ls .chef/knife-*.rb | sed -r 's/.*knife-([a-zA-Z0-9]+)\.rb/\1/' )); }
+compctl -K knife_servers kss
+</pre>
+
 # Credits
 
 The damn good knife spork plugin from the etsy folks : https://github.com/jonlives/knife-spork
@@ -139,5 +150,5 @@ License
 
 Authors
 ======
-Nicolas Szalay | https://github.com/rottenbytes
-Jonathan Amiez | https://github.com/josqu4red
+* Nicolas Szalay | https://github.com/rottenbytes
+* Jonathan Amiez | https://github.com/josqu4red
