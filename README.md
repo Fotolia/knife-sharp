@@ -94,6 +94,38 @@ Available servers:
    dev (/home/jamiez/.chef/knife-dev.rb)
 </pre>
 
+## Rollback
+
+Sometimes you need to be able to rollback a change quickly, because failure happens. So knife sharp now creates rollback points of environment constraints.
+
+A picture says a thousand words :
+
+<pre>
+$ knife sharp rollback --list
+Available rollback points :
+  * 1370414322 (Wed Jun 05 08:38:42 +0200 2013)
+  * 1370418655 (Wed Jun 05 09:50:55 +0200 2013)
+  * 1370419966 (Wed Jun 05 10:12:46 +0200 2013)
+  * 1370421569 (Wed Jun 05 10:39:29 +0200 2013)
+$ knife sharp rollback --show 1370421569
+Rollback point has the following informations :
+  environment : production
+  cookbooks versions :
+   * tests => = 0.0.2
+   * varnish => = 0.0.10
+$ knife sharp rollback --to 1370421569
+Rollback point has the following informations :
+  environment : production
+  cookbooks versions :
+   * varnish => = 0.0.10
+   * tests => = 0.0.2
+Continue rollback ? Y/(N) [N] y
+Setting varnish to version = 0.0.10
+Setting tests to version = 0.0.2
+</pre>
+
+The activation of this rollback feature and its storage dir can be configured in your sharp-config.yml file.
+
 # Configuration
 
 Dependencies :

@@ -187,8 +187,14 @@ module KnifeSharp
       unless @cookbooks.empty?
         env = Chef::Environment.load(@environment)
         cbs = Array.new
+        backup_data = Hash.new
+        backup_data["environment"] = @environment
+        backup_data["cookbook_versions"] = Hash.new
         @cookbooks.each do |cb_name|
           cb = @loader[cb_name]
+          if @cfg["rollback"]["enabled"] == true
+            backup_data["cookbook_versions"][cb_name] = env.cookbook_versions[cb_name]
+          end
           # Force "= a.b.c" in cookbook version, as chef11 will not accept "a.b.c"
           env.cookbook_versions[cb_name] = "= #{cb.version}"
           cbs << cb
@@ -203,6 +209,14 @@ module KnifeSharp
             ui.msg "* Bumping #{cb.name} to #{cb.version} for environment #{@environment}"
             log_action("bumping #{cb.name} to #{cb.version} for environment #{@environment}")
           end
+        end
+
+        if @cfg["rollback"]["enabled"] == true
+          identifier = Time.now.to_i
+          Dir.mkdir(@cfg["rollback"]["destination"]) unless File.exists?(@cfg["rollback"]["destination"])
+          fp = open(File.join(@cfg["rollback"]["destination"], "#{identifier}.json"), "w")
+          fp.write(JSON.pretty_generate(backup_data))
+          fp.close()
         end
       end
     end

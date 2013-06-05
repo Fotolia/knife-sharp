@@ -17,6 +17,7 @@ Gem::Specification.new do |s|
                     lib/chef/knife/sharp-backup.rb
                     lib/chef/knife/sharp-history.rb
                     lib/chef/knife/sharp-server.rb
+                    lib/chef/knife/sharp-rollback.rb
                   ]
   s.homepage    = "https://github.com/Fotolia/knife-sharp"
   s.add_dependency "chef", ">= 10.14.0"
