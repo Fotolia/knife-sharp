@@ -1,19 +1,31 @@
 logging:
   enabled: true
   destination: "~/.chef/sharp.log"
+
 global:
+  # chef git repo root
   git_cookbook_path: "/home/nico/sysadmin/chef/"
+  # backup dir for knife sharp backup
   backupdir: "/home/nico/.chef/sharp/backups/"
+
+# Currently only hubot notifications supported
 notification:
   hubot:
     enabled: true
     url: "http://your.hubot.lan:18080/hubot/chef/bump/"
     channel: "foo"
     username: "Nicolas"
+    # don't notify if updates are done on development chef
     skip: [dev]
+
+# ignore cookbooks/data bags/roles depending on chef server
 # key is the name of your server (in a knife sharp server sense)
 sandboxnico:
-  ignore_cookbooks: [ "tests" ]
+  ignore_cookbooks: [ tests ]
+  ignore_databags: [ staff/admin, infrastructure/mail ]
+  ignore_roles: [ webserver ]
+
+# store modifications of each deploy, to allow rollback
 rollback:
   enabled: true
   destination: "/home/nico/.chef/sharp/rollbacks/"
