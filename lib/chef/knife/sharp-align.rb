@@ -282,6 +282,13 @@ module KnifeSharp
         end
       end
 
+      if @cfg[@chef_server] and @cfg[@chef_server].has_key?("ignore_databags")
+        (updated_dbs.keys.map{|k| k.join("/")} & @cfg[@chef_server]["ignore_databags"]).each do |db|
+          updated_dbs.delete(db.split("/"))
+          ui.msg "* Skipping #{db} data bag (ignore list)"
+        end
+      end
+
       if !updated_dbs.empty?
         all = false
         updated_dbs.each do |name, obj|
@@ -388,6 +395,13 @@ module KnifeSharp
           end
         end
         ui.msg("* #{role} role is not up-to-date (#{diffs.join(",")})") unless diffs.empty?
+      end
+
+      if @cfg[@chef_server] and @cfg[@chef_server].has_key?("ignore_roles")
+        (updated_roles.keys & @cfg[@chef_server]["ignore_roles"]).each do |r|
+          updated_roles.delete(r)
+          ui.msg "* Skipping #{r} role (ignore list)"
+        end
       end
 
       if !updated_roles.empty?
