@@ -192,7 +192,7 @@ module KnifeSharp
         backup_data["cookbook_versions"] = Hash.new
         @cookbooks.each do |cb_name|
           cb = @loader[cb_name]
-          if @cfg["rollback"]["enabled"] == true
+          if @cfg["rollback"] && @cfg["rollback"]["enabled"] == true
             backup_data["cookbook_versions"][cb_name] = env.cookbook_versions[cb_name]
           end
           # Force "= a.b.c" in cookbook version, as chef11 will not accept "a.b.c"
@@ -211,7 +211,7 @@ module KnifeSharp
           end
         end
 
-        if @cfg["rollback"]["enabled"] == true
+        if @cfg["rollback"] && @cfg["rollback"]["enabled"] == true
           identifier = Time.now.to_i
           Dir.mkdir(@cfg["rollback"]["destination"]) unless File.exists?(@cfg["rollback"]["destination"])
           fp = open(File.join(@cfg["rollback"]["destination"], "#{identifier}.json"), "w")
