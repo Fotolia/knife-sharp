@@ -2,13 +2,14 @@
 
 knife-sharp adds several handy features to knife, adapted to our workflow @ Fotolia.
 Features:
-* align : sync data bags, roles and cookbook versions between a local git branches and a chef server
+* align : sync data bags, roles and cookbook versions between a local git branch and a chef server
 * backup : dump environments, roles and data bags to local json files
 * server : switch between chef servers using multiple knife.rb config files
 
 # Tell me more
 
-When you want an environment to reflect a given branch you have to check by hand (or using our consistency plugin), and some mistakes can be made. This plugin aims to help to push the right version into an environment.
+When you want an environment to reflect a given branch you have to check by hand (or using our consistency plugin), and some mistakes can be made.
+This plugin aims to help to push the right version into an environment.
 
 It also allows to adopt a review workflow for main chef components :
 * Track data bags, roles (as JSON files) and cookbooks in your Chef git repository
@@ -21,48 +22,57 @@ It also allows to adopt a review workflow for main chef components :
 
 <pre>
 $ git branch
-...
+[...]
+* ldap
 master
-* syslog_double
-...
-$ knife environment show sandboxnico
+[...]
+
+$ knife environment show production
 chef_type:            environment
 cookbook_versions:
-...
-  syslog:  0.0.16
-...
-$ knife sharp align syslog_double sandboxnico
+[...]
+  apache:  0.0.6
+  ldap:  0.0.3
+[...]
 
-Will change in environment sandboxnico :
-* syslog gets version 0.0.17
-Upload and set version into environment sandboxnico ? Y/N
-Y
-Successfull upload for syslog
-Aligning 1 cookbooks
-Aligning data bags
-* infrastructure/mail data bag item is not up-to-date
-Update infrastructure/mail data bag item on server ? Y/N/(A)ll/(Q)uit [N] n
-* Skipping infrastructure/mail data bag item
-Aligning roles
-* Dev_Server role is not up-to-date (run list)
-Update Dev_Server role on server ? Y/N/(A)ll/(Q)uit [N] n
-* Skipping Dev_Server role
+$ knife sharp align ldap production
+== Cookbooks ==
+* ldap is not up-to-date (local: 0.0.4/remote: 0.0.3)
+* apache is not up-to-date (local: 0.0.7/remote: 0.0.6)
+> Update ldap cookbook to 0.0.4 on server ? Y/N/(A)ll/(Q)uit [N] y
+> Update apache cookbook to 0.0.4 on server ? Y/N/(A)ll/(Q)uit [N] y
+== Data bags ==
+* infrastructure/services data bag item is not up-to-date
+* Skipping infrastructure/services data bag (ignore list)
+* Data bags are up-to-date.
+== Roles ==
+* Roles are up-to-date.
+> Proceed ? (Y/N) y
+* Uploading cookbook(s) ldap, apache
+* Bumping ldap to 0.0.4 for environment production
+* Bumping apache to 0.0.7 for environment production
 </pre>
 
 Then we can check environment :
 
 <pre>
-$ knife environment show sandboxnico
+$ knife environment show production
 chef_type:            environment
 cookbook_versions:
-...
-  syslog:  0.0.17
-...
-$ knife sharp align syslog_double sandboxnico
-Nothing to do : sandboxnico has same versions as syslog_double
+[...]
+  apache:  0.0.7
+  ldap:  0.0.4
+[...]
+
+$ knife sharp align ldap production
+== Cookbooks ==
+* Environment production is up-to-date.
+[...]
 </pre>
 
-It will upload the cookbooks (to ensure they meet the one on the branch you're working on) and will set the version to the required number.
+Cookbooks, data_bags and roles are uploaded, and cookbook versions updated in given environment.
+
+To use all of these features, your knife.rb(s) must provide paths for cookbooks, data bags and roles (see [configuration](#Configuration))
 
 ## Backup
 
@@ -137,7 +147,14 @@ The plugin will search in 2 places for its config file :
 
 An example config file is provided in ext/.
 
-A working knife setup is also required (cookbook/role/data bag paths depending on the desired features)
+A working knife setup is also required (cookbook/role/data bag paths depending on the desired features).
+Fully enabled Sharp needs:
+```ruby
+cookbook_path            '/home/jamiez/chef/cookbooks'
+data_bag_path            '/home/jamiez/chef/data_bags'
+role_path                '/home/jamiez/chef/roles'
+```
+in knife.rb
 
 ## Cookbooks path & git
 If your cookbook_path is not the root of your git directory then the grit gem will produce an error. This can be circumvented by adding the following directive in your config file :
