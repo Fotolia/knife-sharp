@@ -74,6 +74,25 @@ Cookbooks, data_bags and roles are uploaded, and cookbook versions updated in gi
 
 To use all of these features, your knife.rb(s) must provide paths for cookbooks, data bags and roles (see [configuration](#Configuration))
 
+### Ignore list
+
+In a "multi chef server" environment (e.g development/production), you might want to ignore some updates on a given chef server, for instance:
+  * not uploading a test cookbook on your production server
+  * not updating DNS domain with production's one on your dev server
+  * avoid overriding data you are currently working on
+
+Those items can be specified in sharp config file:
+```yaml
+prod: # chef server name, knife-prod.rb client config
+  ignore_cookbooks: [ tests ]
+
+dev:
+  ignore_databags: [ infrastructure/dns ]
+  ignore_roles: [ webserver ]
+```
+
+(more in [sharp-config](ext/sharp-config.yml))
+
 ## Backup
 
 Making a backup before a large change can be a lifesaver. Knife sharp can do it for you, easily
@@ -148,6 +167,7 @@ The plugin will search in 2 places for its config file :
 An example config file is provided in ext/.
 
 A working knife setup is also required (cookbook/role/data bag paths depending on the desired features).
+
 Fully enabled Sharp needs:
 ```ruby
 cookbook_path            '/home/jamiez/chef/cookbooks'
