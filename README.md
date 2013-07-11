@@ -179,20 +179,20 @@ in knife.rb
 ## Cookbooks path & git
 If your cookbook_path is not the root of your git directory then the grit gem will produce an error. This can be circumvented by adding the following directive in your config file :
 
-<pre>
+```yaml
 global:
   git_cookbook_path: "/home/nico/sysadmin/chef/"
-</pre>
+```
 
 As we version more than the cookbooks in the repo.
 
 ## Logging
 It's good to have things logged. The plugin can do it for you. Add this to your config file
-<pre>
+```yaml
 logging:
   enabled: true
   destination: "~/.chef/sharp.log"
-</pre>
+```
 
 It will log uploads, bumps and databags to the standard logger format.
 
@@ -200,12 +200,12 @@ It will log uploads, bumps and databags to the standard logger format.
 
 want a completion on changing servers ?
 
-<pre>
+```sh
 alias kss="knife sharp server"
 
 function knife_servers { reply=($(ls .chef/knife-*.rb | sed -r 's/.*knife-([a-zA-Z0-9]+)\.rb/\1/' )); }
 compctl -K knife_servers kss
-</pre>
+```
 
 # Credits
 
