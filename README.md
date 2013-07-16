@@ -93,6 +93,21 @@ dev:
 
 (more in [sharp-config](ext/sharp-config.yml))
 
+### Downgrading cookbook versions
+
+By default, `knife sharp align` will only try to upgrade cookbook (e.g local version > server version)
+It is possible to allow downgrading using `--force-align` (`-f`) command line switch.
+
+Example:
+<pre>
+knife sharp align master production -f
+On server dev
+== Cookbooks ==
+* syslog is to be downgraded (local: 0.0.44/remote: 0.0.45)
+* sudo is to be downgraded (local: 0.0.8/remote: 0.0.9)
+[...]
+</pre>
+
 ## Backup
 
 Making a backup before a large change can be a lifesaver. Knife sharp can do it for you, easily

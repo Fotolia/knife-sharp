@@ -14,6 +14,12 @@ module KnifeSharp
         :default => false
     end
 
+    option :force_align,
+      :short => "-f",
+      :long => "--force-align",
+      :description => "force local cookbook versions, allow downgrade",
+      :default => false
+
     option :dump_remote_only,
       :short => "-B",
       :long => "--dump-remote-only",
@@ -149,6 +155,9 @@ module KnifeSharp
         if Chef::VersionConstraint.new("> #{remote_versions[cb]}").include?(local_versions[cb])
           updated_versions[cb] = local_versions[cb]
           ui.msg "* #{cb} is not up-to-date (local: #{local_versions[cb]}/remote: #{remote_versions[cb]})"
+        elsif Chef::VersionConstraint.new("> #{local_versions[cb]}").include?(remote_versions[cb]) and config[:force_align]
+          updated_versions[cb] = local_versions[cb]
+          ui.msg "* #{cb} is to be downgraded (local: #{local_versions[cb]}/remote: #{remote_versions[cb]})"
         end
       end
 
