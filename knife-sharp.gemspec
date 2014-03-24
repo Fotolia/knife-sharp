@@ -9,6 +9,7 @@ Gem::Specification.new do |s|
   s.description = "Sharpen your knife"
   s.authors     = [ "Nicolas Szalay", "Jonathan Amiez" ]
   s.email       = [ "nico@rottenbytes.info", "jonathan.amiez@gmail.com" ]
+  s.license     = "3-BSD"
   s.files       = %w[
                     README.md
                     ext/sharp-config.yml
