@@ -121,6 +121,7 @@ module KnifeSharp
       @loader = Chef::CookbookLoader.new(@cb_path)
 
       @cookbooks = Array.new
+      @parent_databags = Array.new
       @databags = Hash.new
       @roles = Hash.new
     end
@@ -301,6 +302,16 @@ module KnifeSharp
       if !updated_dbs.empty?
         all = false
         updated_dbs.each do |name, obj|
+          unless Chef::DataBag.list.keys.include?(name.first)
+            answer = ui.ask_question("Item #{name.join("/")} has no parent on the server. Create ? Y/N ", :default => "N").upcase
+            if answer == "Y"
+              @parent_databags.push(name.first)
+            else
+              ui.msg("Skipping creation, you may experience trouble to update #{name.join("/")}")
+            end
+          end
+          # reset answer
+          answer = nil
           answer = ui.ask_question("> Update #{name.join("/")} data bag item on server ? Y/N/(A)ll/(Q)uit ", :default => "N").upcase unless all
 
           if answer == "A"
@@ -322,6 +333,21 @@ module KnifeSharp
     end
 
     def update_databags
+      # create 'parent' databags first
+      unless @parent_databags.empty?
+        @parent_databags.each do |parent|
+          begin
+            db = Chef::DataBag.new
+            db.name(parent)
+            db.create
+            ui.msg("* Creating data bag #{parent}")
+            log_action("creating data bag #{parent}")
+          rescue Exception => e
+            ui.error("Unable to create databag #{parent}")
+          end
+        end
+      end
+
       unless @databags.empty?
         @databags.each do |name, obj|
           begin
@@ -483,4 +509,5 @@ module KnifeSharp
       end
     end
   end
+
 end
