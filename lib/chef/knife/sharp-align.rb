@@ -301,6 +301,7 @@ module KnifeSharp
       if !updated_dbs.empty?
         all = false
         updated_dbs.each do |name, obj|
+          answer = nil
           answer = ui.ask_question("> Update #{name.join("/")} data bag item on server ? Y/N/(A)ll/(Q)uit ", :default => "N").upcase unless all
 
           if answer == "A"
@@ -322,9 +323,20 @@ module KnifeSharp
     end
 
     def update_databags
+      parent_databags = Chef::DataBag.list.keys
       unless @databags.empty?
         @databags.each do |name, obj|
           begin
+            # create the parent if needed
+            unless parent_databags.include?(name.first)
+              db = Chef::DataBag.new
+              db.name(name.first)
+              db.create
+              # add it to the list to avoid trying to recreate it
+              parent_databags.push(name.first)
+              ui.msg("* Creating data bag #{name.first}")
+              log_action("creating data bag #{name.first}")
+            end
             db = Chef::DataBagItem.new
             db.data_bag(name.first)
             db.raw_data = obj
@@ -483,4 +495,5 @@ module KnifeSharp
       end
     end
   end
+
 end
