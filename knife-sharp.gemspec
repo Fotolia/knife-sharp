@@ -7,20 +7,14 @@ Gem::Specification.new do |s|
   s.date        = Date.today.to_s
   s.summary     = "Knife sharp plugin"
   s.description = "Sharpen your knife"
+  s.homepage    = "https://github.com/Fotolia/knife-sharp"
   s.authors     = [ "Nicolas Szalay", "Jonathan Amiez" ]
   s.email       = [ "nico@rottenbytes.info", "jonathan.amiez@gmail.com" ]
   s.license     = "3-BSD"
-  s.files       = %w[
-                    README.md
-                    ext/sharp-config.yml
-                    lib/knife-sharp.rb
-                    lib/chef/knife/sharp-align.rb
-                    lib/chef/knife/sharp-backup.rb
-                    lib/chef/knife/sharp-history.rb
-                    lib/chef/knife/sharp-server.rb
-                    lib/chef/knife/sharp-rollback.rb
-                  ]
-  s.homepage    = "https://github.com/Fotolia/knife-sharp"
+
+  s.files       = %x(git ls-files).split("\n")
+  s.require_paths = [ "lib" ]
+
   s.add_dependency "chef", ">= 10.14.0"
   s.add_dependency "grit", "~> 2.5.0"
 end

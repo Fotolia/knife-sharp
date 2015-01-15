@@ -1,8 +1,10 @@
 require 'chef/knife'
+require 'knife-sharp/common'
 require 'grit'
 
 module KnifeSharp
   class SharpAlign < Chef::Knife
+    include KnifeSharp::Common
 
     banner "knife sharp align BRANCH ENVIRONMENT [OPTS]"
 
@@ -67,25 +69,9 @@ module KnifeSharp
         @do_cookbooks, @do_databags, @do_roles = true, true, true
       end
 
-      # Sharp config
-      cfg_files = [ "/etc/sharp-config.yml", "~/.chef/sharp-config.yml" ]
-      loaded = false
-      cfg_files.each do |cfg_file|
-        begin
-          @cfg = YAML::load_file(File.expand_path(cfg_file))
-          loaded = true
-        rescue Exception => e
-          ui.error "Error on loading config : #{e.inspect}" if config[:verbosity] > 0
-        end
-      end
-      unless loaded == true
-        ui.error "config could not be loaded ! Tried the following files : #{cfg_files.join(", ")}"
-        exit 1
-      end
-
       # Env setup
       @branch, @environment = name_args
-      @chef_path = @cfg["global"]["git_cookbook_path"]
+      @chef_path = sharp_config["global"]["git_cookbook_path"]
 
       # Checking current branch
       current_branch = Grit::Repo.new(@chef_path).head.name
@@ -94,19 +80,11 @@ module KnifeSharp
         exit 1
       end
 
-      # Knife config
-      if Chef::Knife.chef_config_dir && File.exists?(File.join(Chef::Knife.chef_config_dir, "knife.rb"))
-        Chef::Config.from_file(File.join(Chef::Knife.chef_config_dir, "knife.rb"))
-      else
-        ui.error "Cannot find knife.rb config file"
-        exit 1
-      end
-
       # Logger
-      if @cfg["logging"]["enabled"]
+      if sharp_config["logging"]["enabled"]
         begin
           require "logger"
-          log_file = File.expand_path(@cfg["logging"]["destination"])
+          log_file = File.expand_path(sharp_config["logging"]["destination"])
           @log = Logger.new(log_file)
         rescue Exception => e
           ui.error "Unable to set up logger (#{e.inspect})."
@@ -163,8 +141,8 @@ module KnifeSharp
         end
       end
 
-      if @cfg[@chef_server] and @cfg[@chef_server].has_key?("ignore_cookbooks")
-        (updated_versions.keys & @cfg[@chef_server]["ignore_cookbooks"]).each do |cb|
+      if sharp_config[@chef_server] and sharp_config[@chef_server].has_key?("ignore_cookbooks")
+        (updated_versions.keys & sharp_config[@chef_server]["ignore_cookbooks"]).each do |cb|
           updated_versions.delete(cb)
           ui.msg "* Skipping #{cb} cookbook (ignore list)"
         end
@@ -203,7 +181,7 @@ module KnifeSharp
         backup_data["cookbook_versions"] = Hash.new
         @cookbooks.each do |cb_name|
           cb = @loader[cb_name]
-          if @cfg["rollback"] && @cfg["rollback"]["enabled"] == true
+          if sharp_config["rollback"] && sharp_config["rollback"]["enabled"] == true
             backup_data["cookbook_versions"][cb_name] = env.cookbook_versions[cb_name]
           end
           # Force "= a.b.c" in cookbook version, as chef11 will not accept "a.b.c"
@@ -222,10 +200,10 @@ module KnifeSharp
           end
         end
 
-        if @cfg["rollback"] && @cfg["rollback"]["enabled"] == true
+        if sharp_config["rollback"] && sharp_config["rollback"]["enabled"] == true
           identifier = Time.now.to_i
-          Dir.mkdir(@cfg["rollback"]["destination"]) unless File.exists?(@cfg["rollback"]["destination"])
-          fp = open(File.join(@cfg["rollback"]["destination"], "#{identifier}.json"), "w")
+          Dir.mkdir(sharp_config["rollback"]["destination"]) unless File.exists?(sharp_config["rollback"]["destination"])
+          fp = open(File.join(sharp_config["rollback"]["destination"], "#{identifier}.json"), "w")
           fp.write(JSON.pretty_generate(backup_data))
           fp.close()
         end
@@ -293,8 +271,8 @@ module KnifeSharp
         end
       end
 
-      if @cfg[@chef_server] and @cfg[@chef_server].has_key?("ignore_databags")
-        (updated_dbs.keys.map{|k| k.join("/")} & @cfg[@chef_server]["ignore_databags"]).each do |db|
+      if sharp_config[@chef_server] and sharp_config[@chef_server].has_key?("ignore_databags")
+        (updated_dbs.keys.map{|k| k.join("/")} & sharp_config[@chef_server]["ignore_databags"]).each do |db|
           updated_dbs.delete(db.split("/"))
           ui.msg "* Skipping #{db} data bag (ignore list)"
         end
@@ -420,8 +398,8 @@ module KnifeSharp
         ui.msg("* #{role} role is not up-to-date (#{diffs.join(",")})") unless diffs.empty?
       end
 
-      if @cfg[@chef_server] and @cfg[@chef_server].has_key?("ignore_roles")
-        (updated_roles.keys & @cfg[@chef_server]["ignore_roles"]).each do |r|
+      if sharp_config[@chef_server] and sharp_config[@chef_server].has_key?("ignore_roles")
+        (updated_roles.keys & sharp_config[@chef_server]["ignore_roles"]).each do |r|
           updated_roles.delete(r)
           ui.msg "* Skipping #{r} role (ignore list)"
         end
@@ -470,11 +448,11 @@ module KnifeSharp
       # log file if enabled
       log_message = message
       log_message += " on server #{@chef_server}" if @chef_server
-      @log.info(log_message) if @cfg["logging"]["enabled"]
+      @log.info(log_message) if sharp_config["logging"]["enabled"]
 
       # any defined notification method (currently, only hubot, defined below)
-      if @cfg["notification"]
-        @cfg["notification"].each do |carrier, data|
+      if sharp_config["notification"]
+        sharp_config["notification"].each do |carrier, data|
           skipped = Array.new
           skipped = data["skip"] if data["skip"]
 

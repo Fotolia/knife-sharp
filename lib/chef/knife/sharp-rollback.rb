@@ -1,5 +1,8 @@
+require 'knife-sharp/common'
+
 module KnifeSharp
   class SharpRollback < Chef::Knife
+    include KnifeSharp::Common
 
     banner "knife sharp rollback [--list] [--to <identifier>] [--show <identifier>]"
 
@@ -60,31 +63,6 @@ module KnifeSharp
         exit 1
       end
 
-
-      # Sharp config
-      cfg_files = [ "/etc/sharp-config.yml", "~/.chef/sharp-config.yml" ]
-      loaded = false
-      cfg_files.each do |cfg_file|
-        begin
-          @cfg = YAML::load_file(File.expand_path(cfg_file))
-          loaded = true
-        rescue Exception => e
-          ui.error "Error on loading config : #{e.inspect}" if config[:verbosity] > 0
-        end
-      end
-      unless loaded == true
-        ui.error "config could not be loaded ! Tried the following files : #{cfg_files.join(", ")}"
-        exit 1
-      end
-
-      # Knife config
-      if Chef::Knife.chef_config_dir && File.exists?(File.join(Chef::Knife.chef_config_dir, "knife.rb"))
-        Chef::Config.from_file(File.join(Chef::Knife.chef_config_dir, "knife.rb"))
-      else
-        ui.error "Cannot find knife.rb config file"
-        exit 1
-      end
-
       chefcfg = Chef::Config
       @cb_path = chefcfg.cookbook_path.is_a?(Array) ? chefcfg.cookbook_path.first : chefcfg.cookbook_path
       @loader = Chef::CookbookLoader.new(@cb_path)
@@ -92,7 +70,7 @@ module KnifeSharp
 
     def list_rollback_points()
       ui.msg("Available rollback points :")
-      Dir.glob(File.join(@cfg["rollback"]["destination"], "*.json")).each do |f|
+      Dir.glob(File.join(sharp_config["rollback"]["destination"], "*.json")).each do |f|
         ts = File.basename(f, ".json")
         ui.msg("  * #{ts} (#{Time.at(ts.to_i).to_s})")
       end
@@ -108,7 +86,7 @@ module KnifeSharp
       end
 
       begin
-        fp = File.open(File.join(@cfg["rollback"]["destination"],"#{identifier}.json"),"r")
+        fp = File.open(File.join(sharp_config["rollback"]["destination"],"#{identifier}.json"),"r")
         infos = JSON.load(fp)
       rescue
         ui.error("could not load rollback point #{identifier}")
@@ -125,7 +103,7 @@ module KnifeSharp
 
     def show_rollback_point(identifier)
       begin
-        fp = File.open(File.join(@cfg["rollback"]["destination"],"#{identifier}.json"),"r")
+        fp = File.open(File.join(sharp_config["rollback"]["destination"],"#{identifier}.json"),"r")
       rescue
         ui.error("could not load rollback point #{identifier}")
         exit 1
