@@ -25,8 +25,8 @@ module KnifeSharp
       :default => false
 
     deps do
+      require 'chef/environment'
       require 'chef/cookbook/metadata'
-      require 'chef/cookbook_loader'
     end
 
     def run()
@@ -65,7 +65,6 @@ module KnifeSharp
 
       chefcfg = Chef::Config
       @cb_path = chefcfg.cookbook_path.is_a?(Array) ? chefcfg.cookbook_path.first : chefcfg.cookbook_path
-      @loader = Chef::CookbookLoader.new(@cb_path)
     end
 
     def list_rollback_points()

@@ -17,6 +17,18 @@ module KnifeSharp
 
         @sharp_config
       end
+
+      def cookbook_path
+        @cookbook_path ||= [Chef::Config.send(:cookbook_path)].flatten.first
+      end
+
+      def data_bag_path
+        @data_bag_path ||= [Chef::Config.send(:data_bag_path)].flatten.first
+      end
+
+      def role_path
+        @role_path ||= [Chef::Config.send(:role_path)].flatten.first
+      end
     end
 
     def self.included(receiver)
