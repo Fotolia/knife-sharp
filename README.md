@@ -233,6 +233,10 @@ License
 3 clauses BSD
 
 Authors
-======
+=======
 * Nicolas Szalay | https://github.com/rottenbytes
 * Jonathan Amiez | https://github.com/josqu4red
+
+Contributors
+============
+* Grégoire Doumergue
