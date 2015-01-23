@@ -8,7 +8,6 @@ module KnifeSharp
     deps do
       require 'chef/cookbook/metadata'
       require 'chef/cookbook_loader'
-      require 'chef/cookbook_uploader'
     end
 
     def run
