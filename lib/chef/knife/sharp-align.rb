@@ -136,7 +136,7 @@ module KnifeSharp
       ui.msg(ui.color("== Cookbooks ==", :bold))
 
       updated_versions = Hash.new
-      local_versions = Hash[Dir.glob("#{@cb_path}/*").map {|cb| [File.basename(cb), @loader[File.basename(cb)].version] }]
+      local_versions = Hash[Dir.glob("#{@cb_path}/*").select {|cb| File.directory?(cb)}.map {|cb| [File.basename(cb), @loader[File.basename(cb)].version] }]
       remote_versions = Chef::Environment.load(@environment).cookbook_versions.each_value {|v| v.gsub!("= ", "")}
 
       if local_versions.empty?
