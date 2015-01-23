@@ -27,6 +27,8 @@ module KnifeSharp
       :default => false
 
     deps do
+      require 'chef/environment'
+      require 'chef/role'
       require 'chef/cookbook/metadata'
       require 'chef/cookbook_loader'
       require 'chef/cookbook_uploader'

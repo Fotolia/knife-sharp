@@ -1,0 +1,4 @@
+*.gem
+pkg
+.ruby-gemset
+.ruby-version
