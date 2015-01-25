@@ -212,8 +212,8 @@ module KnifeSharp
         end
 
         ui.msg "* Uploading cookbook(s) #{@cookbooks.join(", ")}"
-        uploader = Chef::CookbookUploader.new(cbs, @cb_path)
-        uploader.upload_cookbooks
+        cookbook_uploader(cbs).upload_cookbooks
+
 
         if env.save
           cbs.each do |cb|
@@ -496,6 +496,13 @@ module KnifeSharp
         ui.error "Unable to notify via hubot."
       end
     end
-  end
 
+    def cookbook_uploader(cookbooks)
+      if Gem::Version.new(Chef::VERSION).release >= Gem::Version.new('12.0.0')
+        uploader = Chef::CookbookUploader.new(cookbooks)
+      else
+        uploader = Chef::CookbookUploader.new(cookbooks, Chef::Config.cookbook_path)
+      end
+    end
+  end
 end
