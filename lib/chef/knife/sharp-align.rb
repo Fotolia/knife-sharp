@@ -1,8 +1,10 @@
 require 'chef/knife'
+require 'knife-sharp/common'
 require 'grit'
 
 module KnifeSharp
   class SharpAlign < Chef::Knife
+    include KnifeSharp::Common
 
     banner "knife sharp align BRANCH ENVIRONMENT [OPTS]"
 
@@ -67,25 +69,9 @@ module KnifeSharp
         @do_cookbooks, @do_databags, @do_roles = true, true, true
       end
 
-      # Sharp config
-      cfg_files = [ "/etc/sharp-config.yml", "~/.chef/sharp-config.yml" ]
-      loaded = false
-      cfg_files.each do |cfg_file|
-        begin
-          @cfg = YAML::load_file(File.expand_path(cfg_file))
-          loaded = true
-        rescue Exception => e
-          ui.error "Error on loading config : #{e.inspect}" if config[:verbosity] > 0
-        end
-      end
-      unless loaded == true
-        ui.error "config could not be loaded ! Tried the following files : #{cfg_files.join(", ")}"
-        exit 1
-      end
-
       # Env setup
       @branch, @environment = name_args
-      @chef_path = @cfg["global"]["git_cookbook_path"]
+      @chef_path = sharp_config["global"]["git_cookbook_path"]
 
       # Checking current branch
       current_branch = Grit::Repo.new(@chef_path).head.name
@@ -94,19 +80,11 @@ module KnifeSharp
         exit 1
       end
 
-      # Knife config
-      if Chef::Knife.chef_config_dir && File.exists?(File.join(Chef::Knife.chef_config_dir, "knife.rb"))
-        Chef::Config.from_file(File.join(Chef::Knife.chef_config_dir, "knife.rb"))
-      else
-        ui.error "Cannot find knife.rb config file"
-        exit 1
-      end
-
       # Logger
-      if @cfg["logging"]["enabled"]
+      if sharp_config["logging"]["enabled"]
         begin
           require "logger"
-          log_file = File.expand_path(@cfg["logging"]["destination"])
+          log_file = File.expand_path(sharp_config["logging"]["destination"])
           @log = Logger.new(log_file)
         rescue Exception => e
           ui.error "Unable to set up logger (#{e.inspect})."
@@ -114,13 +92,7 @@ module KnifeSharp
         end
       end
 
-      chefcfg = Chef::Config
-      @cb_path = chefcfg.cookbook_path.is_a?(Array) ? chefcfg.cookbook_path.first : chefcfg.cookbook_path
-      @db_path = chefcfg.data_bag_path.is_a?(Array) ? chefcfg.data_bag_path.first : chefcfg.data_bag_path
-      @role_path = chefcfg.role_path.is_a?(Array) ? chefcfg.role_path.first : chefcfg.role_path
-
       @chef_server = SharpServer.new.current_server
-      @loader = Chef::CookbookLoader.new(@cb_path)
 
       @cookbooks = Array.new
       @databags = Hash.new
@@ -130,7 +102,7 @@ module KnifeSharp
     ### Cookbook methods ###
 
     def check_cookbooks
-      unless File.exists?(@cb_path)
+      unless File.exists?(cookbook_path)
         ui.warn "Bad cookbook path, skipping cookbook sync."
         return
       end
@@ -138,11 +110,11 @@ module KnifeSharp
       ui.msg(ui.color("== Cookbooks ==", :bold))
 
       updated_versions = Hash.new
-      local_versions = Hash[Dir.glob("#{@cb_path}/*").select {|cb| File.directory?(cb)}.map {|cb| [File.basename(cb), @loader[File.basename(cb)].version] }]
+      local_versions = Hash[Dir.glob("#{cookbook_path}/*").select {|cb| File.directory?(cb)}.map {|cb| [File.basename(cb), cookbook_loader[File.basename(cb)].version] }]
       remote_versions = Chef::Environment.load(@environment).cookbook_versions.each_value {|v| v.gsub!("= ", "")}
 
       if local_versions.empty?
-        ui.warn "No local cookbooks found, is the cookbook path correct ? (#{@cb_path})"
+        ui.warn "No local cookbooks found, is the cookbook path correct ? (#{cookbook_path})"
         return
       end
 
@@ -163,8 +135,8 @@ module KnifeSharp
         end
       end
 
-      if @cfg[@chef_server] and @cfg[@chef_server].has_key?("ignore_cookbooks")
-        (updated_versions.keys & @cfg[@chef_server]["ignore_cookbooks"]).each do |cb|
+      if sharp_config[@chef_server] and sharp_config[@chef_server].has_key?("ignore_cookbooks")
+        (updated_versions.keys & sharp_config[@chef_server]["ignore_cookbooks"]).each do |cb|
           updated_versions.delete(cb)
           ui.msg "* Skipping #{cb} cookbook (ignore list)"
         end
@@ -202,8 +174,8 @@ module KnifeSharp
         backup_data["environment"] = @environment
         backup_data["cookbook_versions"] = Hash.new
         @cookbooks.each do |cb_name|
-          cb = @loader[cb_name]
-          if @cfg["rollback"] && @cfg["rollback"]["enabled"] == true
+          cb = cookbook_loader[cb_name]
+          if sharp_config["rollback"] && sharp_config["rollback"]["enabled"] == true
             backup_data["cookbook_versions"][cb_name] = env.cookbook_versions[cb_name]
           end
           # Force "= a.b.c" in cookbook version, as chef11 will not accept "a.b.c"
@@ -214,7 +186,6 @@ module KnifeSharp
         ui.msg "* Uploading cookbook(s) #{@cookbooks.join(", ")}"
         cookbook_uploader(cbs).upload_cookbooks
 
-
         if env.save
           cbs.each do |cb|
             ui.msg "* Bumping #{cb.name} to #{cb.version} for environment #{@environment}"
@@ -222,10 +193,10 @@ module KnifeSharp
           end
         end
 
-        if @cfg["rollback"] && @cfg["rollback"]["enabled"] == true
+        if sharp_config["rollback"] && sharp_config["rollback"]["enabled"] == true
           identifier = Time.now.to_i
-          Dir.mkdir(@cfg["rollback"]["destination"]) unless File.exists?(@cfg["rollback"]["destination"])
-          fp = open(File.join(@cfg["rollback"]["destination"], "#{identifier}.json"), "w")
+          Dir.mkdir(sharp_config["rollback"]["destination"]) unless File.exists?(sharp_config["rollback"]["destination"])
+          fp = open(File.join(sharp_config["rollback"]["destination"], "#{identifier}.json"), "w")
           fp.write(JSON.pretty_generate(backup_data))
           fp.close()
         end
@@ -235,7 +206,7 @@ module KnifeSharp
     ### Databag methods ###
 
     def check_databags
-      unless File.exists?(@db_path)
+      unless File.exists?(data_bag_path)
         ui.warn "Bad data bag path, skipping data bag sync."
         return
       end
@@ -243,11 +214,11 @@ module KnifeSharp
       ui.msg(ui.color("== Data bags ==", :bold))
 
       updated_dbs = Hash.new
-      local_dbs = Dir.glob(File.join(@db_path, "**/*.json")).map {|f| [File.dirname(f).split("/").last, File.basename(f, ".json")]}
+      local_dbs = Dir.glob(File.join(data_bag_path, "**/*.json")).map {|f| [File.dirname(f).split("/").last, File.basename(f, ".json")]}
       remote_dbs = Chef::DataBag.list.keys.map {|db| Chef::DataBag.load(db).keys.map{|dbi| [db, dbi]}}.flatten(1)
 
       if local_dbs.empty?
-        ui.warn "No local data bags found, is the data bag path correct ? (#{@db_path})"
+        ui.warn "No local data bags found, is the data bag path correct ? (#{data_bag_path})"
         return
       end
 
@@ -255,11 +226,11 @@ module KnifeSharp
       (remote_dbs - local_dbs).each do |db|
         ui.msg "* #{db.join("/")} data bag item is remote only"
         if config[:dump_remote_only]
-          ui.msg "* Dumping to #{File.join(@db_path, "#{db.join("/")}.json")}"
+          ui.msg "* Dumping to #{File.join(data_bag_path, "#{db.join("/")}.json")}"
           begin
             remote_db = Chef::DataBagItem.load(db.first, db.last).raw_data
-            Dir.mkdir(File.join(@db_path, db.first)) unless File.exists?(File.join(@db_path, db.first))
-            File.open(File.join(@db_path, "#{db.join("/")}.json"), "w") do |file|
+            Dir.mkdir(File.join(data_bag_path, db.first)) unless File.exists?(File.join(data_bag_path, db.first))
+            File.open(File.join(data_bag_path, "#{db.join("/")}.json"), "w") do |file|
               file.puts JSON.pretty_generate(remote_db)
             end
           rescue Exception => e
@@ -271,7 +242,7 @@ module KnifeSharp
       # Create new data bags on server
       (local_dbs - remote_dbs).each do |db|
         begin
-          local_db = JSON::load(File.read(File.join(@db_path, "#{db.join("/")}.json")))
+          local_db = JSON::load(File.read(File.join(data_bag_path, "#{db.join("/")}.json")))
           updated_dbs[db] = local_db
           ui.msg "* #{db.join("/")} data bag item is local only"
         rescue Exception => e
@@ -283,7 +254,7 @@ module KnifeSharp
       (remote_dbs & local_dbs).each do |db|
         begin
           remote_db = Chef::DataBagItem.load(db.first, db.last).raw_data
-          local_db = JSON::load(File.read(File.join(@db_path, "#{db.join("/")}.json")))
+          local_db = JSON::load(File.read(File.join(data_bag_path, "#{db.join("/")}.json")))
           if remote_db != local_db
             updated_dbs[db] = local_db
             ui.msg("* #{db.join("/")} data bag item is not up-to-date")
@@ -293,8 +264,8 @@ module KnifeSharp
         end
       end
 
-      if @cfg[@chef_server] and @cfg[@chef_server].has_key?("ignore_databags")
-        (updated_dbs.keys.map{|k| k.join("/")} & @cfg[@chef_server]["ignore_databags"]).each do |db|
+      if sharp_config[@chef_server] and sharp_config[@chef_server].has_key?("ignore_databags")
+        (updated_dbs.keys.map{|k| k.join("/")} & sharp_config[@chef_server]["ignore_databags"]).each do |db|
           updated_dbs.delete(db.split("/"))
           ui.msg "* Skipping #{db} data bag (ignore list)"
         end
@@ -362,7 +333,7 @@ module KnifeSharp
         "override_attributes" => "override attributes"
       }
 
-      unless File.exists?(@role_path)
+      unless File.exists?(role_path)
         ui.warn "Bad role path, skipping role sync."
         return
       end
@@ -370,11 +341,11 @@ module KnifeSharp
       ui.msg(ui.color("== Roles ==", :bold))
 
       updated_roles = Hash.new
-      local_roles = Dir.glob(File.join(@role_path, "*.json")).map {|file| File.basename(file, ".json")}
+      local_roles = Dir.glob(File.join(role_path, "*.json")).map {|file| File.basename(file, ".json")}
       remote_roles = Chef::Role.list.keys
 
       if local_roles.empty?
-        ui.warn "No local roles found, is the role path correct ? (#{@role_path})"
+        ui.warn "No local roles found, is the role path correct ? (#{role_path})"
         return
       end
 
@@ -382,10 +353,10 @@ module KnifeSharp
       (remote_roles - local_roles).each do |role|
         ui.msg "* #{role} role is remote only"
         if config[:dump_remote_only]
-          ui.msg "* Dumping to #{File.join(@role_path, "#{role}.json")}"
+          ui.msg "* Dumping to #{File.join(role_path, "#{role}.json")}"
           begin
             remote_role = Chef::Role.load(role)
-            File.open(File.join(@role_path, "#{role}.json"), "w") do |file|
+            File.open(File.join(role_path, "#{role}.json"), "w") do |file|
               file.puts JSON.pretty_generate(remote_role)
             end
           rescue Exception => e
@@ -420,8 +391,8 @@ module KnifeSharp
         ui.msg("* #{role} role is not up-to-date (#{diffs.join(",")})") unless diffs.empty?
       end
 
-      if @cfg[@chef_server] and @cfg[@chef_server].has_key?("ignore_roles")
-        (updated_roles.keys & @cfg[@chef_server]["ignore_roles"]).each do |r|
+      if sharp_config[@chef_server] and sharp_config[@chef_server].has_key?("ignore_roles")
+        (updated_roles.keys & sharp_config[@chef_server]["ignore_roles"]).each do |r|
           updated_roles.delete(r)
           ui.msg "* Skipping #{r} role (ignore list)"
         end
@@ -470,11 +441,11 @@ module KnifeSharp
       # log file if enabled
       log_message = message
       log_message += " on server #{@chef_server}" if @chef_server
-      @log.info(log_message) if @cfg["logging"]["enabled"]
+      @log.info(log_message) if sharp_config["logging"]["enabled"]
 
       # any defined notification method (currently, only hubot, defined below)
-      if @cfg["notification"]
-        @cfg["notification"].each do |carrier, data|
+      if sharp_config["notification"]
+        sharp_config["notification"].each do |carrier, data|
           skipped = Array.new
           skipped = data["skip"] if data["skip"]
 
@@ -495,6 +466,10 @@ module KnifeSharp
       rescue
         ui.error "Unable to notify via hubot."
       end
+    end
+
+    def cookbook_loader
+      @cookbook_loader ||= Chef::CookbookLoader.new(Chef::Config.cookbook_path)
     end
 
     def cookbook_uploader(cookbooks)
