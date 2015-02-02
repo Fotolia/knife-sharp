@@ -38,7 +38,7 @@ module KnifeSharp
 
     def run
       setup()
-      ui.msg(ui.color("On server #{@chef_server}", :bold)) if @chef_server
+      ui.msg(ui.color("On server #{chef_server}", :bold)) if chef_server
       check_cookbooks if @do_cookbooks
       check_databags if @do_databags
       check_roles if @do_roles
@@ -80,20 +80,6 @@ module KnifeSharp
         exit 1
       end
 
-      # Logger
-      if sharp_config["logging"]["enabled"]
-        begin
-          require "logger"
-          log_file = File.expand_path(sharp_config["logging"]["destination"])
-          @log = Logger.new(log_file)
-        rescue Exception => e
-          ui.error "Unable to set up logger (#{e.inspect})."
-          exit 1
-        end
-      end
-
-      @chef_server = SharpServer.new.current_server
-
       @cookbooks = Array.new
       @databags = Hash.new
       @roles = Hash.new
@@ -110,8 +96,8 @@ module KnifeSharp
       ui.msg(ui.color("== Cookbooks ==", :bold))
 
       updated_versions = Hash.new
-      local_versions = Hash[Dir.glob("#{cookbook_path}/*").select {|cb| File.directory?(cb)}.map {|cb| [File.basename(cb), cookbook_loader[File.basename(cb)].version] }]
-      remote_versions = Chef::Environment.load(@environment).cookbook_versions.each_value {|v| v.gsub!("= ", "")}
+      local_versions = local_cookbook_versions
+      remote_versions = remote_cookbook_versions
 
       if local_versions.empty?
         ui.warn "No local cookbooks found, is the cookbook path correct ? (#{cookbook_path})"
@@ -135,8 +121,8 @@ module KnifeSharp
         end
       end
 
-      if sharp_config[@chef_server] and sharp_config[@chef_server].has_key?("ignore_cookbooks")
-        (updated_versions.keys & sharp_config[@chef_server]["ignore_cookbooks"]).each do |cb|
+      if sharp_config[chef_server] and sharp_config[chef_server].has_key?("ignore_cookbooks")
+        (updated_versions.keys & sharp_config[chef_server]["ignore_cookbooks"]).each do |cb|
           updated_versions.delete(cb)
           ui.msg "* Skipping #{cb} cookbook (ignore list)"
         end
@@ -264,8 +250,8 @@ module KnifeSharp
         end
       end
 
-      if sharp_config[@chef_server] and sharp_config[@chef_server].has_key?("ignore_databags")
-        (updated_dbs.keys.map{|k| k.join("/")} & sharp_config[@chef_server]["ignore_databags"]).each do |db|
+      if sharp_config[chef_server] and sharp_config[chef_server].has_key?("ignore_databags")
+        (updated_dbs.keys.map{|k| k.join("/")} & sharp_config[chef_server]["ignore_databags"]).each do |db|
           updated_dbs.delete(db.split("/"))
           ui.msg "* Skipping #{db} data bag (ignore list)"
         end
@@ -391,8 +377,8 @@ module KnifeSharp
         ui.msg("* #{role} role is not up-to-date (#{diffs.join(",")})") unless diffs.empty?
       end
 
-      if sharp_config[@chef_server] and sharp_config[@chef_server].has_key?("ignore_roles")
-        (updated_roles.keys & sharp_config[@chef_server]["ignore_roles"]).each do |r|
+      if sharp_config[chef_server] and sharp_config[chef_server].has_key?("ignore_roles")
+        (updated_roles.keys & sharp_config[chef_server]["ignore_roles"]).each do |r|
           updated_roles.delete(r)
           ui.msg "* Skipping #{r} role (ignore list)"
         end
@@ -440,8 +426,8 @@ module KnifeSharp
     def log_action(message)
       # log file if enabled
       log_message = message
-      log_message += " on server #{@chef_server}" if @chef_server
-      @log.info(log_message) if sharp_config["logging"]["enabled"]
+      log_message += " on server #{chef_server}" if chef_server
+      logger.info(log_message) if sharp_config["logging"]["enabled"]
 
       # any defined notification method (currently, only hubot, defined below)
       if sharp_config["notification"]
@@ -449,7 +435,7 @@ module KnifeSharp
           skipped = Array.new
           skipped = data["skip"] if data["skip"]
 
-          if data["enabled"] and !skipped.include?(@chef_server)
+          if data["enabled"] and !skipped.include?(chef_server)
             send(carrier, message, data)
           end
         end
@@ -468,6 +454,10 @@ module KnifeSharp
       end
     end
 
+    def chef_server
+      @chef_server ||= SharpServer.new.current_server
+    end
+
     def cookbook_loader
       @cookbook_loader ||= Chef::CookbookLoader.new(Chef::Config.cookbook_path)
     end
@@ -478,6 +468,14 @@ module KnifeSharp
       else
         uploader = Chef::CookbookUploader.new(cookbooks, Chef::Config.cookbook_path)
       end
+    end
+
+    def local_cookbook_versions
+      Hash[Dir.glob("#{cookbook_path}/*").select {|cb| File.directory?(cb)}.map {|cb| [File.basename(cb), cookbook_loader[File.basename(cb)].version] }]
+    end
+
+    def remote_cookbook_versions
+      Chef::Environment.load(@environment).cookbook_versions.each_value {|v| v.gsub!("= ", "")}
     end
   end
 end

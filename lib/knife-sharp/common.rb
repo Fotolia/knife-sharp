@@ -1,3 +1,5 @@
+require 'logger'
+
 module KnifeSharp
   module Common
     module ClassMethods; end
@@ -28,6 +30,20 @@ module KnifeSharp
 
       def role_path
         @role_path ||= [Chef::Config.send(:role_path)].flatten.first
+      end
+
+      def logger
+        return @logger unless @logger.nil?
+
+        begin
+          log_file = sharp_config["logging"]["destination"] || "~/.chef/sharp.log"
+          @logger = Logger.new(File.expand_path(log_file))
+        rescue Exception => e
+          ui.error "Unable to set up logger (#{e.inspect})."
+          exit 1
+        end
+
+        @logger
       end
     end
 
