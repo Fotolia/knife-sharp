@@ -6,8 +6,10 @@ module KnifeSharp
     banner "knife sharp backup"
 
     deps do
-      require 'chef/cookbook/metadata'
-      require 'chef/cookbook_loader'
+      require 'chef/environment'
+      require 'chef/role'
+      require 'chef/data_bag'
+      require 'chef/data_bag_item'
     end
 
     def run
