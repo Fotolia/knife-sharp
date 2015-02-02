@@ -37,7 +37,25 @@ module KnifeSharp
     end
 
     def run
-      setup()
+      # Checking args
+      ensure_branch_and_environment_provided!
+
+      # Checking repo branch
+      ensure_correct_branch_provided!
+
+      # check cli flags
+      if config[:cookbooks] or config[:databags] or config[:roles]
+        @do_cookbooks, @do_databags, @do_roles = config[:cookbooks], config[:databags], config[:roles]
+      else
+        @do_cookbooks, @do_databags, @do_roles = true, true, true
+      end
+
+      # Env setup
+
+      @cookbooks = Array.new
+      @databags = Hash.new
+      @roles = Hash.new
+
       ui.msg(ui.color("On server #{chef_server}", :bold)) if chef_server
       check_cookbooks if @do_cookbooks
       check_databags if @do_databags
@@ -53,36 +71,6 @@ module KnifeSharp
       bump_cookbooks if @do_cookbooks
       update_databags if @do_databags
       update_roles if @do_roles
-    end
-
-    def setup
-      # Checking args
-      if name_args.count != 2
-        show_usage
-        exit 1
-      end
-
-      # check cli flags
-      if config[:cookbooks] or config[:databags] or config[:roles]
-        @do_cookbooks, @do_databags, @do_roles = config[:cookbooks], config[:databags], config[:roles]
-      else
-        @do_cookbooks, @do_databags, @do_roles = true, true, true
-      end
-
-      # Env setup
-      @branch, @environment = name_args
-      @chef_path = sharp_config["global"]["git_cookbook_path"]
-
-      # Checking current branch
-      current_branch = Grit::Repo.new(@chef_path).head.name
-      if @branch != current_branch then
-        ui.error "Git repo is actually on branch #{current_branch} but you want to align using #{@branch}. Checkout to the desired one."
-        exit 1
-      end
-
-      @cookbooks = Array.new
-      @databags = Hash.new
-      @roles = Hash.new
     end
 
     ### Cookbook methods ###
@@ -147,17 +135,17 @@ module KnifeSharp
           end
         end
       else
-        ui.msg "* Environment #{@environment} is up-to-date."
+        ui.msg "* Environment #{environment} is up-to-date."
       end
     end
 
 
     def bump_cookbooks
       unless @cookbooks.empty?
-        env = Chef::Environment.load(@environment)
+        env = Chef::Environment.load(environment)
         cbs = Array.new
         backup_data = Hash.new
-        backup_data["environment"] = @environment
+        backup_data["environment"] = environment
         backup_data["cookbook_versions"] = Hash.new
         @cookbooks.each do |cb_name|
           cb = cookbook_loader[cb_name]
@@ -174,8 +162,8 @@ module KnifeSharp
 
         if env.save
           cbs.each do |cb|
-            ui.msg "* Bumping #{cb.name} to #{cb.version} for environment #{@environment}"
-            log_action("bumping #{cb.name} to #{cb.version} for environment #{@environment}")
+            ui.msg "* Bumping #{cb.name} to #{cb.version} for environment #{environment}"
+            log_action("bumping #{cb.name} to #{cb.version} for environment #{environment}")
           end
         end
 
@@ -475,7 +463,7 @@ module KnifeSharp
     end
 
     def remote_cookbook_versions
-      Chef::Environment.load(@environment).cookbook_versions.each_value {|v| v.gsub!("= ", "")}
+      Chef::Environment.load(environment).cookbook_versions.each_value {|v| v.gsub!("= ", "")}
     end
   end
 end

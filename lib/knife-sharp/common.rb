@@ -20,6 +20,28 @@ module KnifeSharp
         @sharp_config
       end
 
+      def ensure_correct_branch_provided!
+        # Checking current branch
+        given_branch = @name_args.first
+        current_branch = Grit::Repo.new(sharp_config["global"]["git_cookbook_path"]).head.name
+
+        if given_branch != current_branch then
+          ui.error "Git repo is actually on branch #{current_branch} but you want to align using #{given_branch}. Checkout to the desired one."
+          exit 1
+        end
+      end
+
+      def ensure_branch_and_environment_provided!
+        if @name_args.size != 2
+          show_usage
+          exit 1
+        end
+      end
+
+      def environment
+        @environment ||= @name_args.last
+      end
+
       def cookbook_path
         @cookbook_path ||= [Chef::Config.send(:cookbook_path)].flatten.first
       end
