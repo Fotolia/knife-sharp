@@ -67,6 +67,10 @@ module KnifeSharp
 
         @logger
       end
+
+      def chef_server
+        @chef_server ||= SharpServer.new.current_server
+      end
     end
 
     def self.included(receiver)

@@ -45,40 +45,37 @@ module KnifeSharp
 
       # check cli flags
       if config[:cookbooks] or config[:databags] or config[:roles]
-        @do_cookbooks, @do_databags, @do_roles = config[:cookbooks], config[:databags], config[:roles]
+        do_cookbooks, do_databags, do_roles = config[:cookbooks], config[:databags], config[:roles]
       else
-        @do_cookbooks, @do_databags, @do_roles = true, true, true
+        do_cookbooks, do_databags, do_roles = true, true, true
       end
 
-      # Env setup
-
-      @cookbooks = Array.new
-      @databags = Hash.new
-      @roles = Hash.new
-
       ui.msg(ui.color("On server #{chef_server}", :bold)) if chef_server
-      check_cookbooks if @do_cookbooks
-      check_databags if @do_databags
-      check_roles if @do_roles
+
+      cookbooks_to_update = do_cookbooks ? check_cookbooks : []
+      databags_to_update = do_databags ? check_databags : {}
+      roles_to_update = do_roles ? check_roles : {}
 
       # All questions asked, can we proceed ?
-      if @cookbooks.empty? and @databags.empty? and @roles.empty?
+      if cookbooks_to_update.empty? and databags_to_update.empty? and roles_to_update.empty?
         ui.msg "Nothing else to do"
         exit 0
       end
 
       ui.confirm(ui.color("> Proceed ", :bold))
-      bump_cookbooks if @do_cookbooks
-      update_databags if @do_databags
-      update_roles if @do_roles
+      bump_cookbooks(cookbooks_to_update) if do_cookbooks
+      update_databags(databags_to_update) if do_databags
+      update_roles(roles_to_update) if do_roles
     end
 
     ### Cookbook methods ###
 
     def check_cookbooks
+      to_update = Array.new
+
       unless File.exists?(cookbook_path)
         ui.warn "Bad cookbook path, skipping cookbook sync."
-        return
+        return to_update
       end
 
       ui.msg(ui.color("== Cookbooks ==", :bold))
@@ -89,7 +86,7 @@ module KnifeSharp
 
       if local_versions.empty?
         ui.warn "No local cookbooks found, is the cookbook path correct ? (#{cookbook_path})"
-        return
+        return to_update
       end
 
       # get local-only cookbooks
@@ -129,7 +126,7 @@ module KnifeSharp
           end
 
           if all or answer == "Y"
-            @cookbooks << cb
+            to_update << cb
           else
             ui.msg "* Skipping #{cb} cookbook"
           end
@@ -137,17 +134,19 @@ module KnifeSharp
       else
         ui.msg "* Environment #{environment} is up-to-date."
       end
+
+      to_update
     end
 
 
-    def bump_cookbooks
-      unless @cookbooks.empty?
+    def bump_cookbooks(cookbook_list)
+      unless cookbook_list.empty?
         env = Chef::Environment.load(environment)
         cbs = Array.new
         backup_data = Hash.new
         backup_data["environment"] = environment
         backup_data["cookbook_versions"] = Hash.new
-        @cookbooks.each do |cb_name|
+        cookbook_list.each do |cb_name|
           cb = cookbook_loader[cb_name]
           if sharp_config["rollback"] && sharp_config["rollback"]["enabled"] == true
             backup_data["cookbook_versions"][cb_name] = env.cookbook_versions[cb_name]
@@ -157,7 +156,7 @@ module KnifeSharp
           cbs << cb
         end
 
-        ui.msg "* Uploading cookbook(s) #{@cookbooks.join(", ")}"
+        ui.msg "* Uploading cookbook(s) #{cookbook_list.join(", ")}"
         cookbook_uploader(cbs).upload_cookbooks
 
         if env.save
@@ -180,9 +179,11 @@ module KnifeSharp
     ### Databag methods ###
 
     def check_databags
+      to_update = Hash.new
+
       unless File.exists?(data_bag_path)
         ui.warn "Bad data bag path, skipping data bag sync."
-        return
+        return to_update
       end
 
       ui.msg(ui.color("== Data bags ==", :bold))
@@ -193,7 +194,7 @@ module KnifeSharp
 
       if local_dbs.empty?
         ui.warn "No local data bags found, is the data bag path correct ? (#{data_bag_path})"
-        return
+        return to_update
       end
 
       # Dump missing data bags locally
@@ -259,7 +260,7 @@ module KnifeSharp
           end
 
           if all or answer == "Y"
-            @databags[name] = obj
+            to_update[name] = obj
           else
             ui.msg "* Skipping #{name.join("/")} data bag item"
           end
@@ -267,32 +268,32 @@ module KnifeSharp
       else
         ui.msg "* Data bags are up-to-date."
       end
+
+      to_update
     end
 
-    def update_databags
+    def update_databags(databag_list)
       parent_databags = Chef::DataBag.list.keys
-      unless @databags.empty?
-        @databags.each do |name, obj|
-          begin
-            # create the parent if needed
-            unless parent_databags.include?(name.first)
-              db = Chef::DataBag.new
-              db.name(name.first)
-              db.create
-              # add it to the list to avoid trying to recreate it
-              parent_databags.push(name.first)
-              ui.msg("* Creating data bag #{name.first}")
-              log_action("creating data bag #{name.first}")
-            end
-            db = Chef::DataBagItem.new
-            db.data_bag(name.first)
-            db.raw_data = obj
-            db.save
-            ui.msg "* Updating #{name.join("/")} data bag item"
-            log_action("updating #{name.join("/")} data bag item")
-          rescue Exception => e
-            ui.error "Unable to update #{name.join("/")} data bag item"
+      databag_list.each do |name, obj|
+        begin
+          # create the parent if needed
+          unless parent_databags.include?(name.first)
+            db = Chef::DataBag.new
+            db.name(name.first)
+            db.create
+            # add it to the list to avoid trying to recreate it
+            parent_databags.push(name.first)
+            ui.msg("* Creating data bag #{name.first}")
+            log_action("creating data bag #{name.first}")
           end
+          db = Chef::DataBagItem.new
+          db.data_bag(name.first)
+          db.raw_data = obj
+          db.save
+          ui.msg "* Updating #{name.join("/")} data bag item"
+          log_action("updating #{name.join("/")} data bag item")
+        rescue Exception => e
+          ui.error "Unable to update #{name.join("/")} data bag item"
         end
       end
     end
@@ -300,16 +301,11 @@ module KnifeSharp
     ### Role methods ###
 
     def check_roles
-      # role sections to compare (methods)
-      to_check = {
-        "env_run_lists" => "run list",
-        "default_attributes" => "default attributes",
-        "override_attributes" => "override attributes"
-      }
+      to_update = Hash.new
 
       unless File.exists?(role_path)
         ui.warn "Bad role path, skipping role sync."
-        return
+        return to_update
       end
 
       ui.msg(ui.color("== Roles ==", :bold))
@@ -320,7 +316,7 @@ module KnifeSharp
 
       if local_roles.empty?
         ui.warn "No local roles found, is the role path correct ? (#{role_path})"
-        return
+        return to_update
       end
 
       # Dump missing roles locally
@@ -356,7 +352,7 @@ module KnifeSharp
         local_role = Chef::Role.from_disk(role)
 
         diffs = Array.new
-        to_check.each do |method, display|
+        relevant_role_keys.each do |method, display|
           if remote_role.send(method) != local_role.send(method)
             updated_roles[role] = local_role
             diffs << display
@@ -385,7 +381,7 @@ module KnifeSharp
           end
 
           if all or answer == "Y"
-            @roles[name] = obj
+            to_update[name] = obj
           else
             ui.msg "* Skipping #{name} role"
           end
@@ -393,18 +389,18 @@ module KnifeSharp
       else
         ui.msg "* Roles are up-to-date."
       end
+
+      to_update
     end
 
-    def update_roles
-      unless @roles.empty?
-        @roles.each do |name, obj|
-          begin
-            obj.save
-            ui.msg "* Updating #{name} role"
-            log_action("updating #{name} role")
-          rescue Exception => e
-            ui.error "Unable to update #{name} role"
-          end
+    def update_roles(role_list)
+      role_list.each do |name, obj|
+        begin
+          obj.save
+          ui.msg "* Updating #{name} role"
+          log_action("updating #{name} role")
+        rescue Exception => e
+          ui.error "Unable to update #{name} role"
         end
       end
     end
@@ -442,10 +438,6 @@ module KnifeSharp
       end
     end
 
-    def chef_server
-      @chef_server ||= SharpServer.new.current_server
-    end
-
     def cookbook_loader
       @cookbook_loader ||= Chef::CookbookLoader.new(Chef::Config.cookbook_path)
     end
@@ -464,6 +456,15 @@ module KnifeSharp
 
     def remote_cookbook_versions
       Chef::Environment.load(environment).cookbook_versions.each_value {|v| v.gsub!("= ", "")}
+    end
+
+    def relevant_role_keys
+      # role sections to compare (methods)
+      {
+        "env_run_lists" => "run list",
+        "default_attributes" => "default attributes",
+        "override_attributes" => "override attributes"
+      }
     end
   end
 end
