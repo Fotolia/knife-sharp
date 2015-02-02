@@ -15,6 +15,6 @@ Gem::Specification.new do |s|
   s.files       = %x(git ls-files).split("\n")
   s.require_paths = [ "lib" ]
 
-  s.add_dependency "chef", ">= 10.14.0"
-  s.add_dependency "grit", "~> 2.5.0"
+  s.add_dependency "chef", ">= 11"
+  s.add_dependency "grit", "~> 2.5"
 end
