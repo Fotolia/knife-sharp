@@ -52,7 +52,7 @@ module KnifeSharp
 
       ui.msg(ui.color("On server #{chef_server}", :bold)) if chef_server
 
-      cookbooks_to_update = do_cookbooks ? check_cookbooks : []
+      cookbooks_to_update = do_cookbooks ? check_cookbooks(environment) : []
       databags_to_update = do_databags ? check_databags : {}
       roles_to_update = do_roles ? check_roles : {}
 
@@ -63,14 +63,14 @@ module KnifeSharp
       end
 
       ui.confirm(ui.color("> Proceed ", :bold))
-      bump_cookbooks(cookbooks_to_update) if do_cookbooks
+      bump_cookbooks(environment, cookbooks_to_update) if do_cookbooks
       update_databags(databags_to_update) if do_databags
       update_roles(roles_to_update) if do_roles
     end
 
     ### Cookbook methods ###
 
-    def check_cookbooks
+    def check_cookbooks(env)
       to_update = Array.new
 
       unless File.exists?(cookbook_path)
@@ -82,7 +82,7 @@ module KnifeSharp
 
       updated_versions = Hash.new
       local_versions = local_cookbook_versions
-      remote_versions = remote_cookbook_versions
+      remote_versions = remote_cookbook_versions(env)
 
       if local_versions.empty?
         ui.warn "No local cookbooks found, is the cookbook path correct ? (#{cookbook_path})"
@@ -132,19 +132,19 @@ module KnifeSharp
           end
         end
       else
-        ui.msg "* Environment #{environment} is up-to-date."
+        ui.msg "* Environment #{env} is up-to-date."
       end
 
       to_update
     end
 
 
-    def bump_cookbooks(cookbook_list)
+    def bump_cookbooks(env_name, cookbook_list)
       unless cookbook_list.empty?
-        env = Chef::Environment.load(environment)
+        env = Chef::Environment.load(env_name)
         cbs = Array.new
         backup_data = Hash.new
-        backup_data["environment"] = environment
+        backup_data["environment"] = env.name
         backup_data["cookbook_versions"] = Hash.new
         cookbook_list.each do |cb_name|
           cb = cookbook_loader[cb_name]
@@ -161,8 +161,8 @@ module KnifeSharp
 
         if env.save
           cbs.each do |cb|
-            ui.msg "* Bumping #{cb.name} to #{cb.version} for environment #{environment}"
-            log_action("bumping #{cb.name} to #{cb.version} for environment #{environment}")
+            ui.msg "* Bumping #{cb.name} to #{cb.version} for environment #{env.name}"
+            log_action("bumping #{cb.name} to #{cb.version} for environment #{env.name}")
           end
         end
 
@@ -405,39 +405,6 @@ module KnifeSharp
       end
     end
 
-    ### Utility methods ###
-
-    def log_action(message)
-      # log file if enabled
-      log_message = message
-      log_message += " on server #{chef_server}" if chef_server
-      logger.info(log_message) if sharp_config["logging"]["enabled"]
-
-      # any defined notification method (currently, only hubot, defined below)
-      if sharp_config["notification"]
-        sharp_config["notification"].each do |carrier, data|
-          skipped = Array.new
-          skipped = data["skip"] if data["skip"]
-
-          if data["enabled"] and !skipped.include?(chef_server)
-            send(carrier, message, data)
-          end
-        end
-      end
-    end
-
-    def hubot(message, config={})
-      begin
-        require "net/http"
-        require "uri"
-        uri = URI.parse("#{config["url"]}/#{config["channel"]}")
-        notif = "chef: #{message} by #{config["username"]}"
-        Net::HTTP.post_form(uri, { "message" => notif })
-      rescue
-        ui.error "Unable to notify via hubot."
-      end
-    end
-
     def cookbook_loader
       @cookbook_loader ||= Chef::CookbookLoader.new(Chef::Config.cookbook_path)
     end
@@ -454,8 +421,8 @@ module KnifeSharp
       Hash[Dir.glob("#{cookbook_path}/*").select {|cb| File.directory?(cb)}.map {|cb| [File.basename(cb), cookbook_loader[File.basename(cb)].version] }]
     end
 
-    def remote_cookbook_versions
-      Chef::Environment.load(environment).cookbook_versions.each_value {|v| v.gsub!("= ", "")}
+    def remote_cookbook_versions(env)
+      Chef::Environment.load(env).cookbook_versions.each_value {|v| v.gsub!("= ", "")}
     end
 
     def relevant_role_keys

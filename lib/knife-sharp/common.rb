@@ -71,6 +71,37 @@ module KnifeSharp
       def chef_server
         @chef_server ||= SharpServer.new.current_server
       end
+
+      def log_action(message)
+        # log file if enabled
+        log_message = message
+        log_message += " on server #{chef_server}" if chef_server
+        logger.info(log_message) if sharp_config["logging"]["enabled"]
+
+        # any defined notification method (currently, only hubot, defined below)
+        if sharp_config["notification"]
+          sharp_config["notification"].each do |carrier, data|
+            skipped = Array.new
+            skipped = data["skip"] if data["skip"]
+
+            if data["enabled"] and !skipped.include?(chef_server)
+              send(carrier, message, data)
+            end
+          end
+        end
+      end
+
+      def hubot(message, config={})
+        begin
+          require "net/http"
+          require "uri"
+          uri = URI.parse("#{config["url"]}/#{config["channel"]}")
+          notif = "chef: #{message} by #{config["username"]}"
+          Net::HTTP.post_form(uri, { "message" => notif })
+        rescue
+          ui.error "Unable to notify via hubot."
+        end
+      end
     end
 
     def self.included(receiver)
