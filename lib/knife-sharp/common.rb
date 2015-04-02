@@ -38,6 +38,13 @@ module KnifeSharp
         end
       end
 
+      def ensure_branch_provided!
+        if @name_args.size != 1
+          show_usage
+          exit 1
+        end
+      end
+
       def environment
         @environment ||= @name_args.last
       end
@@ -52,6 +59,10 @@ module KnifeSharp
 
       def role_path
         @role_path ||= [Chef::Config.send(:role_path)].flatten.first
+      end
+
+      def environment_path
+        @environment_path ||= [Chef::Config.send(:environment_path)].flatten.first
       end
 
       def logger
@@ -100,6 +111,14 @@ module KnifeSharp
           Net::HTTP.post_form(uri, { "message" => notif })
         rescue
           ui.error "Unable to notify via bot."
+        end
+      end
+
+      def ignore_list(component)
+        if sharp_config[chef_server] and sharp_config[chef_server]["ignore_#{component}"]
+          sharp_config[chef_server]["ignore_#{component}"]
+        else
+          []
         end
       end
     end
