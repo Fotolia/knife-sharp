@@ -39,6 +39,7 @@ module KnifeSharp
         return to_update
       end
 
+      ui.msg(ui.color("On server #{chef_server}", :bold)) if chef_server
       ui.msg(ui.color("== Environments ==", :bold))
 
       local_envs = Dir.glob(File.join(environment_path, "*.json")).map {|file| File.basename(file, ".json")}
@@ -74,7 +75,7 @@ module KnifeSharp
         end.compact
 
         unless diffs.empty?
-          message = "* #{remote_env.name} environment is not up-to-date (#{diffs.join(", ")})})"
+          message = "* #{remote_env.name} environment is not up-to-date (#{diffs.join(", ")}))"
           if ignore_list(:environments).include?(remote_env.name)
             message += " (ignored)"
           else
