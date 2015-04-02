@@ -18,6 +18,8 @@ module KnifeSharp
       # Checking repo branch
       ensure_correct_branch_provided!
 
+      ui.msg(ui.color("On server #{chef_server}", :bold)) if chef_server
+
       to_update = check_environments
 
       if to_update.empty?
@@ -39,7 +41,6 @@ module KnifeSharp
         return to_update
       end
 
-      ui.msg(ui.color("On server #{chef_server}", :bold)) if chef_server
       ui.msg(ui.color("== Environments ==", :bold))
 
       local_envs = Dir.glob(File.join(environment_path, "*.json")).map {|file| File.basename(file, ".json")}
