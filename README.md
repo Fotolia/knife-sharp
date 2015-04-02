@@ -72,7 +72,7 @@ $ knife sharp align ldap production
 
 Cookbooks, data_bags and roles are uploaded, and cookbook versions updated in given environment.
 
-To use all of these features, your knife.rb(s) must provide paths for cookbooks, data bags and roles (see [configuration](#Configuration))
+To use all of these features, your knife.rb(s) must provide paths for cookbooks, data bags, roles and environments (see [configuration](#Configuration))
 
 ### Ignore list
 
@@ -188,6 +188,7 @@ Fully enabled Sharp needs:
 cookbook_path            '/home/jamiez/chef/cookbooks'
 data_bag_path            '/home/jamiez/chef/data_bags'
 role_path                '/home/jamiez/chef/roles'
+environment_path         '/home/jamiez/chef/environments'
 ```
 in knife.rb
 
