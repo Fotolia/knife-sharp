@@ -8,11 +8,14 @@ global:
   # backup dir for knife sharp backup
   backupdir: "/home/nico/.chef/sharp/backups/"
 
-# Currently only hubot notifications supported
+# Currently only bot notifications supported
+# notification operation:
+# POST <url>/<channel>
+# with JSON payload {"message": <message>}
 notification:
-  hubot:
+  bot:
     enabled: true
-    url: "http://your.hubot.lan:18080/hubot/chef/bump/"
+    url: "http://bot.lan:18080/chef/bump/"
     channel: "foo"
     username: "Nicolas"
     # don't notify if updates are done on development chef

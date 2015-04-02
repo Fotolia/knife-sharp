@@ -91,7 +91,7 @@ module KnifeSharp
         end
       end
 
-      def hubot(message, config={})
+      def bot(message, config={})
         begin
           require "net/http"
           require "uri"
@@ -99,7 +99,7 @@ module KnifeSharp
           notif = "chef: #{message} by #{config["username"]}"
           Net::HTTP.post_form(uri, { "message" => notif })
         rescue
-          ui.error "Unable to notify via hubot."
+          ui.error "Unable to notify via bot."
         end
       end
     end
