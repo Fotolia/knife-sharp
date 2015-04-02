@@ -75,7 +75,7 @@ module KnifeSharp
         end.compact
 
         unless diffs.empty?
-          message = "* #{remote_env.name} environment is not up-to-date (#{diffs.join(", ")}))"
+          message = "* #{remote_env.name} environment is not up-to-date (#{diffs.join(", ")})"
           if ignore_list(:environments).include?(remote_env.name)
             message += " (ignored)"
           else
