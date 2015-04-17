@@ -16,5 +16,4 @@ Gem::Specification.new do |s|
   s.require_paths = [ "lib" ]
 
   s.add_dependency "chef", ">= 11"
-  s.add_dependency "grit", "~> 2.5"
 end
