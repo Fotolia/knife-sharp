@@ -172,9 +172,6 @@ The activation of this rollback feature and its storage dir can be configured in
 
 # Configuration
 
-Dependencies :
-* grit
-
 The plugin will search in 2 places for its config file :
 * "/etc/sharp-config.yml"
 * "~/.chef/sharp-config.yml"
@@ -192,8 +189,9 @@ environment_path         '/home/jamiez/chef/environments'
 ```
 in knife.rb
 
-## Cookbooks path & git
-If your cookbook_path is not the root of your git directory then the grit gem will produce an error. This can be circumvented by adding the following directive in your config file :
+## Current git branch
+
+knife-sharp will check that the given branch is the active one in the chef repo. Chef repo path has to be specified in sharp-config.yml file:
 
 ```yaml
 global:
@@ -203,6 +201,7 @@ global:
 As we version more than the cookbooks in the repo.
 
 ## Logging
+
 It's good to have things logged. The plugin can do it for you. Add this to your config file
 ```yaml
 logging:

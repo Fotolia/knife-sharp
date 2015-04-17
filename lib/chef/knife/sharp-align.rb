@@ -1,6 +1,5 @@
 require 'chef/knife'
 require 'knife-sharp/common'
-require 'grit'
 
 module KnifeSharp
   class SharpAlign < Chef::Knife
