@@ -55,7 +55,7 @@ module KnifeSharp
       (local_envs - remote_envs).each do |env|
         local_env = Chef::Environment.load_from_file(env)
         message = "* #{local_env.name} environment is local only"
-        if ignore_list(:environments).include(local_env.name)
+        if ignore_list(:environments).include?(local_env.name)
           message += " (ignored)"
         else
           not_up_to_date << local_env
