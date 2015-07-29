@@ -24,7 +24,7 @@ module KnifeSharp
         # Checking current branch
         given_branch = @name_args.first
 
-        Dir.chdir(sharp_config["global"]["git_cookbook_path"]) do
+        Dir.chdir(File.expand_path(sharp_config["global"]["git_cookbook_path"])) do
           current_branch = %x(git rev-parse --abbrev-ref HEAD).chomp
           if given_branch != current_branch
             ui.error "Git repo is actually on branch #{current_branch} but you want to align using #{given_branch}. Checkout to the desired one."
