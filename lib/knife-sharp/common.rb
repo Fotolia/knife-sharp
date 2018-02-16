@@ -110,9 +110,11 @@ module KnifeSharp
           require "uri"
           uri = URI.parse("#{config["url"]}/#{config["channel"]}")
           notif = "chef: #{message} by #{config["username"]}"
-          Net::HTTP.post_form(uri, { "message" => notif })
-        rescue
-          ui.error "Unable to notify via bot."
+          http = Net::HTTP.new(uri.host, uri.port)
+          http.use_ssl = (uri.scheme == "https")
+          http.post(uri.path, "message=#{notif}")
+        rescue Exception => e
+          ui.error "Unable to notify via bot. #{e.message}"
         end
       end
 
