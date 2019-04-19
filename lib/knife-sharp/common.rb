@@ -112,6 +112,8 @@ module KnifeSharp
           notif = "chef: #{message} by #{config["username"]}"
           http = Net::HTTP.new(uri.host, uri.port)
           http.use_ssl = (uri.scheme == "https")
+          http.verify_mode = OpenSSL::SSL::VERIFY_NONE if config["ssl_verify_mode"] == :none
+          http.ca_file = File.expand_path(config["ssl_ca_file"]) if config["ssl_ca_file"]
           http.post(uri.path, "message=#{notif}")
         rescue Exception => e
           ui.error "Unable to notify via bot. #{e.message}"
@@ -133,4 +135,3 @@ module KnifeSharp
     end
   end
 end
-

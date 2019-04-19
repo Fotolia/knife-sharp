@@ -20,6 +20,10 @@ notification:
     username: "Nicolas"
     # don't notify if updates are done on development chef
     skip: [dev]
+    # Set to :none to skip CA cert checking
+    ssl_verify_mode: :verify
+    # Optional path to CA file
+    ssl_ca_file: "~/.chef/my-ca.pem"
 
 # ignore cookbooks/data bags/roles depending on chef server
 # key is the name of your server (in a knife sharp server sense)
